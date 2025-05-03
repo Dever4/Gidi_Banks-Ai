@@ -119,7 +119,11 @@ const start = async () => {
         auth: state,
         logger: P({ level: 'silent' }),
         browser: ['Bot', 'silent', '4.0.0'],
-        printQRInTerminal: true
+        printQRInTerminal: true,
+        // The following options help with QR generation in cloud environments like Railway
+        qrTimeout: 60000, // Longer timeout for QR scanning
+        connectTimeoutMs: 60000, // Longer connection timeout
+        defaultQueryTimeoutMs: 60000 // Longer query timeout
     })
 
     // Store the active instance information in the client
@@ -187,7 +191,26 @@ const start = async () => {
         if (update.qr) {
             client.log(`[${chalk.red('!')}]`, 'white')
             client.log(`Scan the QR code above | You can also authenticate at http://localhost:${port}`, 'blue')
-            client.QR = imageSync(update.qr)
+
+            // Store the raw QR data - this is critical for Railway deployment
+            client.qrRaw = update.qr
+            client.qrTimestamp = Date.now()
+
+            try {
+                // Try to generate QR image
+                client.QR = imageSync(update.qr)
+                console.log(`✅ QR code generated successfully at ${new Date(client.qrTimestamp).toLocaleString()}`)
+
+                // For Railway deployment, log a special message with the QR data
+                if (process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN) {
+                    console.log('📱 RAILWAY DEPLOYMENT DETECTED - QR CODE DATA:')
+                    console.log(update.qr)
+                    console.log('📱 Copy this data to a QR code generator if needed')
+                }
+            } catch (qrError) {
+                console.error('❌ Error generating QR code image:', qrError)
+                // Even if image generation fails, we still have the raw QR data stored
+            }
         }
         if (connection === 'close') {
             // Reset global connection flags
@@ -324,33 +347,93 @@ const start = async () => {
         }
     })
 
-    // QR Code endpoint
+    // QR Code endpoint - Railway-compatible
     app.get('/api/qrcode', (req, res) => {
+        console.log('QR code requested. Available QR data:', !!client.qrRaw, 'Available QR image:', !!client.QR);
+
+        // Calculate QR code expiration (typically valid for 60 seconds)
+        const qrTimestamp = client.qrTimestamp || Date.now();
+        const expiresAt = qrTimestamp + 60000; // 60 seconds from generation
+        const timeLeft = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+
+        // First check if we have raw QR data (most reliable, especially on Railway)
+        if (client.qrRaw) {
+            try {
+                // Try to generate a fresh QR code image from the raw data
+                console.log('Generating fresh QR code from raw data');
+                const qrImage = imageSync(client.qrRaw);
+                const qrCodeBase64 = qrImage.toString('base64');
+
+                // Store the newly generated image for future use
+                client.QR = qrImage;
+
+                console.log(`Sending fresh QR code. Expires in ${timeLeft} seconds`);
+                return res.json({
+                    qrCode: qrCodeBase64,
+                    qrRaw: client.qrRaw, // Include raw data as backup
+                    status: client.state || 'unknown',
+                    instanceId: client.instanceId,
+                    timestamp: qrTimestamp,
+                    expiresAt: expiresAt,
+                    timeLeft: timeLeft,
+                    source: 'raw_data'
+                });
+            } catch (err) {
+                console.error('Error generating QR from raw data:', err);
+                // If image generation fails, still send the raw data
+                return res.json({
+                    qrCode: null,
+                    qrRaw: client.qrRaw, // Send raw data so client can generate QR
+                    status: client.state || 'unknown',
+                    instanceId: client.instanceId,
+                    timestamp: qrTimestamp,
+                    expiresAt: expiresAt,
+                    timeLeft: timeLeft,
+                    message: 'QR image generation failed, but raw data is available',
+                    source: 'raw_data_only'
+                });
+            }
+        }
+
+        // If we have a stored QR image but no raw data, try to use that
         if (client.QR) {
-            // Convert the QR code buffer to base64
-            const qrCodeBase64 = client.QR.toString('base64');
+            try {
+                console.log('Using stored QR image');
+                const qrCodeBase64 = client.QR.toString('base64');
 
-            // Calculate QR code expiration (typically valid for 60 seconds)
-            const qrTimestamp = client.qrTimestamp || Date.now();
-            const expiresAt = qrTimestamp + 60000; // 60 seconds from generation
-            const timeLeft = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+                return res.json({
+                    qrCode: qrCodeBase64,
+                    status: client.state || 'unknown',
+                    instanceId: client.instanceId,
+                    timestamp: qrTimestamp,
+                    expiresAt: expiresAt,
+                    timeLeft: timeLeft,
+                    source: 'stored_image'
+                });
+            } catch (err) {
+                console.error('Error converting stored QR image to base64:', err);
+            }
+        }
 
-            res.json({
-                qrCode: qrCodeBase64,
-                status: client.state || 'unknown',
-                instanceId: client.instanceId,
-                timestamp: qrTimestamp,
-                expiresAt: expiresAt,
-                timeLeft: timeLeft
-            });
-        } else {
-            res.json({
+        // If we get here, we couldn't provide a QR code
+        console.log('No QR code available to send. Connection state:', client.state);
+
+        // Check if we're connected - provide a more helpful message
+        if (client.state === 'open' || global.connected) {
+            return res.json({
                 qrCode: null,
-                status: client.state || 'unknown',
+                status: 'open',
                 instanceId: client.instanceId,
-                message: 'No QR code available. The bot might already be connected.'
+                message: 'WhatsApp is already connected. No QR code needed.'
             });
         }
+
+        res.json({
+            qrCode: null,
+            status: client.state || 'unknown',
+            instanceId: client.instanceId,
+            message: 'No QR code available yet. Please restart the bot or wait for the QR code to be generated.'
+        });
     })
 
     // Bot status endpoint
@@ -1124,25 +1207,88 @@ const start = async () => {
         res.sendFile(path.join(__dirname, '../admin-panel/build/index.html'))
     })
 
-    // Socket.IO connection
+    // Socket.IO connection - Railway-compatible
     io.on('connection', (socket) => {
         console.log('Client connected to WebSocket')
 
         // Send initial QR code if available
-        if (client && client.QR) {
+        if (client) {
             // Calculate QR code expiration (typically valid for 60 seconds)
             const qrTimestamp = client.qrTimestamp || Date.now();
             const expiresAt = qrTimestamp + 60000; // 60 seconds from generation
             const timeLeft = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
 
-            socket.emit('qrcode', {
-                qrCode: client.QR.toString('base64'),
-                status: client.state || 'unknown',
-                instanceId: client.instanceId,
-                timestamp: qrTimestamp,
-                expiresAt: expiresAt,
-                timeLeft: timeLeft
-            });
+            // First check if we have raw QR data (most reliable, especially on Railway)
+            if (client.qrRaw) {
+                try {
+                    // Try to generate a fresh QR code image from the raw data
+                    console.log('Socket.IO: Generating fresh QR code from raw data');
+                    const qrImage = imageSync(client.qrRaw);
+                    const qrCodeBase64 = qrImage.toString('base64');
+
+                    // Store the newly generated image for future use
+                    client.QR = qrImage;
+
+                    console.log(`Socket.IO: Sending fresh QR code. Expires in ${timeLeft} seconds`);
+                    socket.emit('qrcode', {
+                        qrCode: qrCodeBase64,
+                        qrRaw: client.qrRaw, // Include raw data as backup
+                        status: client.state || 'unknown',
+                        instanceId: client.instanceId,
+                        timestamp: qrTimestamp,
+                        expiresAt: expiresAt,
+                        timeLeft: timeLeft,
+                        source: 'raw_data'
+                    });
+                    return;
+                } catch (err) {
+                    console.error('Socket.IO: Error generating QR from raw data:', err);
+                    // If image generation fails, still send the raw data
+                    socket.emit('qrcode', {
+                        qrCode: null,
+                        qrRaw: client.qrRaw, // Send raw data so client can generate QR
+                        status: client.state || 'unknown',
+                        instanceId: client.instanceId,
+                        timestamp: qrTimestamp,
+                        expiresAt: expiresAt,
+                        timeLeft: timeLeft,
+                        message: 'QR image generation failed, but raw data is available',
+                        source: 'raw_data_only'
+                    });
+                    return;
+                }
+            }
+
+            // If we have a stored QR image but no raw data, try to use that
+            if (client.QR) {
+                try {
+                    console.log('Socket.IO: Using stored QR image');
+                    const qrCodeBase64 = client.QR.toString('base64');
+
+                    socket.emit('qrcode', {
+                        qrCode: qrCodeBase64,
+                        status: client.state || 'unknown',
+                        instanceId: client.instanceId,
+                        timestamp: qrTimestamp,
+                        expiresAt: expiresAt,
+                        timeLeft: timeLeft,
+                        source: 'stored_image'
+                    });
+                    return;
+                } catch (err) {
+                    console.error('Socket.IO: Error converting stored QR image to base64:', err);
+                }
+            }
+
+            // If we're connected, send that info
+            if (client.state === 'open' || global.connected) {
+                socket.emit('status', {
+                    status: 'open',
+                    instanceId: client.instanceId,
+                    timestamp: Date.now(),
+                    message: 'WhatsApp is already connected. No QR code needed.'
+                });
+            }
         }
 
         // Send initial bot instances data
@@ -1239,22 +1385,56 @@ start().then(client => {
         console.log('Connection update:', update);
 
         if (update.qr) {
-            // Store QR code generation timestamp
+            // Store QR code generation timestamp and raw QR data
             client.qrTimestamp = Date.now();
+            client.qrRaw = update.qr;
 
             // Calculate QR code expiration (typically valid for 60 seconds)
             const expiresAt = client.qrTimestamp + 60000; // 60 seconds from generation
             const timeLeft = 60; // Start with 60 seconds
 
-            // Emit QR code with instance information
-            io.emit('qrcode', {
-                qrCode: client.QR.toString('base64'),
-                status: client.state || 'unknown',
-                instanceId: client.instanceId,
-                timestamp: client.qrTimestamp,
-                expiresAt: expiresAt,
-                timeLeft: timeLeft
-            });
+            // For Railway deployment, log the QR data directly
+            if (process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN) {
+                console.log('📱 RAILWAY DEPLOYMENT - QR CODE DATA:');
+                console.log(update.qr);
+                console.log('📱 Copy this data to a QR code generator if needed');
+            }
+
+            try {
+                // Try to generate a fresh QR code image from the raw data
+                console.log('Connection update: Generating fresh QR code from raw data');
+                const qrImage = imageSync(update.qr);
+                const qrCodeBase64 = qrImage.toString('base64');
+
+                // Store the newly generated image for future use
+                client.QR = qrImage;
+
+                console.log(`Connection update: Emitting QR code. Valid for ${timeLeft} seconds`);
+                io.emit('qrcode', {
+                    qrCode: qrCodeBase64,
+                    qrRaw: update.qr, // Include raw data as backup
+                    status: client.state || 'unknown',
+                    instanceId: client.instanceId,
+                    timestamp: client.qrTimestamp,
+                    expiresAt: expiresAt,
+                    timeLeft: timeLeft,
+                    source: 'connection_update'
+                });
+            } catch (err) {
+                console.error('Connection update: Error generating QR from raw data:', err);
+                // If image generation fails, still send the raw data
+                io.emit('qrcode', {
+                    qrCode: null,
+                    qrRaw: update.qr, // Send raw data so client can generate QR
+                    status: client.state || 'unknown',
+                    instanceId: client.instanceId,
+                    timestamp: client.qrTimestamp,
+                    expiresAt: expiresAt,
+                    timeLeft: timeLeft,
+                    message: 'QR image generation failed, but raw data is available',
+                    source: 'connection_update_raw_only'
+                });
+            }
 
             // Update QR timestamp in bot instances
             try {
