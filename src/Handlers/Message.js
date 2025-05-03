@@ -164,42 +164,42 @@ DO NOT change the links or the core instructions. Just make the language more en
 
 /**
  * Generates a human-like, conversational response when a user replies with "DONE".
- * The response congratulates them and builds anticipation for upcoming classes.
+ * The response congratulates them and builds anticipation for upcoming financial training.
  *
  * @param {string} userName - The name of the user to personalize the response for.
- * @returns {Promise<string>} - A natural-sounding, conversational response.
+ * @returns {Promise<string>} - A natural-sounding, conversational response focused on financial training.
  */
 async function generateCompletionResponse(userName) {
     try {
         // Create a more human-like, conversational response that doesn't sound like AI
         // No mention of "what can I do for you" or revealing it's a bot
-        // Focus on congratulating them and building anticipation for the class
+        // Focus on congratulating them and building anticipation for the financial training
 
         // Choose randomly from several natural-sounding responses to seem more human
         const responses = [
-            `Perfect! You're all set ${userName} 🔥 Have you joined our WhatsApp group yet? The classes are starting super soon and they're gonna be massive! Get ready to take some notes - we'll be covering some game-changing stuff. See you in class! 💯`,
+            `Perfect! You're all set ${userName} 🔥 The financial freedom training with Gidi Banks is starting super soon! Get ready to learn his proven system for generating serious income online. His students are already making 6-7 figures using these strategies. Make sure you're active in the WhatsApp group - that's where all the action happens! 💰`,
 
-            `That's great ${userName}! You're good to go now. The upcoming classes are gonna be incredible - we've put together some amazing content for you. Are you in the WhatsApp group? That's where all the action happens. Can't wait for you to see what we've prepared! 🚀`,
+            `That's great ${userName}! You're good to go now. Gidi Banks has prepared an incredible wealth-building training that's helped thousands of people create financial freedom. Are you ready to transform your finances? The WhatsApp group is where we'll share all the important updates about when we start. This could be your turning point! 🚀`,
 
-            `Awesome ${userName}! You're officially in 🙌 The classes we've prepared are gonna be mind-blowing - make sure you're in the WhatsApp group cuz that's where everything happens. Get ready for some serious value coming your way! Looking forward to seeing how you do.`,
+            `Awesome ${userName}! You're officially in 🙌 Gidi Banks is about to reveal his complete blueprint for making money online - the same one that's helped ordinary people quit their 9-5 jobs. Make sure you're checking the WhatsApp group regularly because that's where everything happens. Get ready for some serious value coming your way!`,
 
-            `You're all set ${userName}! The training is gonna be massive - we've put together some incredible content that's gonna change how you approach this whole field. Have you joined our WhatsApp group? That's where we post all updates. Get ready for an amazing journey! ✨`,
+            `You're all set ${userName}! The financial training is going to be massive - Gidi Banks will be sharing his exact strategies for creating multiple income streams that work for you 24/7. These methods have already helped so many people achieve financial freedom. Stay active in the WhatsApp group for all updates. Your journey to wealth creation starts now! ✨`,
 
-            `Fantastic! You've completed all the steps ${userName} 👏 The classes will be starting soon, and trust me, you don't wanna miss any of them. Make sure you're active in the WhatsApp group - that's where I'll be dropping all the important updates. Looking forward to seeing you shine!`,
+            `Fantastic! You've completed all the steps ${userName} 👏 Gidi Banks' money-making training will be starting soon, and trust me, you don't want to miss any of it. His students are seeing incredible results using these strategies. Make sure you're active in the WhatsApp group - that's where I'll be dropping all the important updates. Looking forward to seeing your financial transformation!`,
 
-            `Great job ${userName}! Everything's set up now. I'm honestly so excited for you to experience these upcoming classes - they're packed with valuable content. Have you joined the WhatsApp group? That's your main hub for all class announcements. Get ready for some serious knowledge bombs! 💣`,
+            `Great job ${userName}! Everything's set up now. I'm honestly so excited for you to experience Gidi Banks' financial freedom training - it's packed with practical, actionable strategies that can help you start generating serious income online. The WhatsApp group is your main hub for all announcements. Get ready for some serious wealth-building knowledge! 💎`,
 
-            `You're good to go ${userName}! The training we've prepared is gonna blow your mind (not even exaggerating lol). Make sure you're in the WhatsApp group since that's where all the magic happens. The classes are starting soon, so get ready to level up your skills in a big way!`,
+            `You're good to go ${userName}! The wealth creation training Gidi Banks has prepared is going to blow your mind. His students are making life-changing income using these exact methods. Make sure you're in the WhatsApp group since that's where all the magic happens. The training starts soon, so get ready to transform your financial future in a big way!`,
 
-            `All done! You're now officially part of the program ${userName} 🎉 The classes we've lined up are gonna be game-changers for real. Have you joined the WhatsApp group? That's essential cuz all updates will be shared there. Can't wait to see your transformation through this journey!`,
+            `All done! You're now officially part of the program ${userName} 🎉 Gidi Banks' financial training is going to be a game-changer for real. You'll learn step-by-step how to create multiple income streams, even if you're starting from zero. Stay active in the WhatsApp group for all updates. Can't wait to see your success story!`,
 
-            `Yesss! You're all set now ${userName}! 🙌 I'm so excited for you to join the classes - they're gonna be amazing! Have you joined the WhatsApp group yet? That's where I'll be posting all the updates about when we start. Can't wait!`,
+            `Yesss! You're all set now ${userName}! 🙌 I'm so excited for you to join Gidi Banks' money-making training - it's going to be incredible! His strategies have helped people just like you achieve financial freedom. The WhatsApp group is where I'll be posting all the updates about when we start. This is going to change everything for you!`,
 
-            `Perfect ${userName}! You've completed everything 👍 Now just make sure you're in the WhatsApp group because that's where all the important stuff gets posted. The training is starting soon and it's gonna be incredible!`,
+            `Perfect ${userName}! You've completed everything 👍 Now just make sure you're in the WhatsApp group because that's where Gidi Banks will be sharing his proven system for generating serious income online. These are strategies that work even in today's economy. The training is starting soon and it's going to be life-changing!`,
 
-            `Awesome! You're all ready to go ${userName} 😄 The classes are starting soon and between you and me, the content is insanely good! Make sure you're checking the WhatsApp group regularly - that's where I post all the important updates.`,
+            `Awesome! You're all ready to go ${userName} 😄 Gidi Banks' financial freedom training is starting soon and between you and me, the content is insanely valuable! You'll learn exactly how to start making money online using methods that have already helped thousands of people. Make sure you're checking the WhatsApp group regularly for all updates!`,
 
-            `You're all set ${userName}! Can't wait for you to experience the training - it's gonna be a game-changer for sure! Just make sure you're active in the WhatsApp group so you don't miss any announcements. See you in class! 🔥`
+            `You're all set ${userName}! Can't wait for you to experience Gidi Banks' wealth-building training - it's going to be a game-changer for your finances! His students are making 6-7 figures using these exact strategies. Just make sure you're active in the WhatsApp group so you don't miss any announcements. Your journey to financial freedom starts now! 💵`
         ];
 
         // Select a random response to seem more human-like
@@ -208,8 +208,8 @@ async function generateCompletionResponse(userName) {
 
     } catch (error) {
         console.error("🚨 Error generating completion response:", error);
-        // Even the fallback should feel human and conversational
-        return `Perfect ${userName}! You're all set for the training now. The classes are starting soon and they're going to be incredible! Make sure you're in our WhatsApp group - that's where all the action will happen. Looking forward to seeing you in class! 🔥`;
+        // Even the fallback should feel human and conversational and focus on financial training
+        return `Perfect ${userName}! You're all set for Gidi Banks' financial freedom training. You'll learn his proven system for generating serious income online - the same one that's helped ordinary people create extraordinary wealth. Make sure you're active in the WhatsApp group for all important announcements. This training could change your financial future forever! 💰`;
     }
 }
 
@@ -303,6 +303,32 @@ async function generateFocusedResponse(message, userName, client, M) {
         // Convert message to lowercase for easier matching
         const lowerMsg = message.toLowerCase().trim();
 
+        // Check if user has already joined the group
+        const groupJoinedTable = client.DB.table('groupJoined');
+        const hasJoined = await groupJoinedTable.get(M.sender);
+
+        // Check if user is saying they've joined the group
+        if (!hasJoined &&
+            (lowerMsg.includes('joined') || lowerMsg.includes('i have joined') || lowerMsg.includes('i joined') ||
+             lowerMsg.includes('i am in') || lowerMsg.includes("i'm in") || lowerMsg.includes('i am now in'))) {
+
+            console.log(`🎉 User ${M.pushName} (${M.sender}) says they've joined the group in focused response`);
+
+            // Mark user as having joined the group
+            await groupJoinedTable.set(M.sender, true);
+
+            // Generate a personalized response
+            const joinedResponses = [
+                `That's awesome ${userName}! 🎉 You're all set for the training now. I'll be sharing some amazing content there soon!`,
+                `Perfect ${userName}! 👍 You're now officially part of the training. Get ready for some incredible classes!`,
+                `Great job ${userName}! 🙌 You're now all set for the training. Can't wait for you to see what we've prepared!`,
+                `Excellent ${userName}! 🔥 You're now fully registered for the training. It's going to be amazing!`,
+                `Fantastic ${userName}! ✨ You're all set for the training now. Looking forward to seeing you participate!`
+            ];
+
+            return joinedResponses[Math.floor(Math.random() * joinedResponses.length)];
+        }
+
         // Check for explicit group link requests or negative responses about joining the group
         if ((lowerMsg.includes('link') && (lowerMsg.includes('send') || lowerMsg.includes('give') || lowerMsg.includes('share') || lowerMsg.includes('need'))) ||
             (lowerMsg.match(/^no\b/) && lowerMsg.length < 10) || // Simple "no" response
@@ -310,6 +336,21 @@ async function generateFocusedResponse(message, userName, client, M) {
             (lowerMsg.includes('not') && (lowerMsg.includes('join') || lowerMsg.includes('in the group') || lowerMsg.includes('in group'))) ||
             (lowerMsg === "no")) {
             console.log("🔗 Direct group link request or negative response about group membership detected");
+
+            // If user has already joined but is asking for the link again
+            if (hasJoined && !lowerMsg.includes('link') && !lowerMsg.includes('send') && !lowerMsg.includes('give')) {
+                console.log(`⚠️ User ${M.pushName} (${M.sender}) already marked as joined but requesting link again in focused response`);
+
+                // Generate a personalized response
+                const alreadyJoinedResponses = [
+                    `Hey ${userName}, I thought you already joined the group! Do you need the link again?`,
+                    `${userName}, didn't you already join the group? Let me know if you need the link again.`,
+                    `I remember you saying you joined the group ${userName}. Did you leave or need the link again?`,
+                    `${userName}, I have you marked as already in the group. Do you need the link again?`
+                ];
+
+                return alreadyJoinedResponses[Math.floor(Math.random() * alreadyJoinedResponses.length)];
+            }
 
             // This is a direct request for the group link - send it immediately
             try {
@@ -357,47 +398,47 @@ async function generateFocusedResponse(message, userName, client, M) {
             }
         }
 
-        // Check for greetings
+        // Check for greetings - focused on financial training with Gidi Banks
         if (lowerMsg.match(/^(hi|hello|hey|hola|greetings|good morning|good afternoon|good evening|yo|sup|what's up|howdy)/i)) {
             const greetingResponses = [
-                `Hey ${userName}! 👋 Hope ur getting ready for the upcoming classes. Have you checked out the WhatsApp group yet? That's where we post all the important stuff.`,
+                `Hey ${userName}! 👋 Are you ready to learn how to create serious wealth online? Gidi Banks is about to reveal his proven system for generating 6-7 figures. Have you joined the WhatsApp group yet? That's where all the action happens!`,
 
-                `Hi there ${userName}! Just checking in to see if you're all set for the training. The classes are gonna be packed with amazing content! Excited? 🔥`,
+                `Hi there ${userName}! 😊 Excited to have you on board for this life-changing financial training. Gidi Banks has helped thousands of people create financial freedom, and you could be next! Have you checked out the WhatsApp group?`,
 
-                `Hello ${userName}! How's it going? Make sure you're in the WhatsApp group - we'll be dropping some pre-class materials there soon 📝`,
+                `Hello ${userName}! 🔥 How's it going? Just wanted to make sure you're ready for Gidi Banks' exclusive training on creating multiple income streams. His students are making life-changing money using these strategies!`,
 
-                `Heyyy ${userName}! Good to hear from you 😊 The training starts soon and it's going to be incredible. Joined our WhatsApp group yet?`,
+                `Heyyy ${userName}! Great to hear from you! 💰 The financial freedom training with Gidi Banks starts soon. People who've applied his methods are now making consistent income online. Are you ready to transform your finances?`,
 
-                `Hey there ${userName}! How are you? Just wanted to make sure you're ready for the classes. They're gonna be awesome!`,
+                `Hey there ${userName}! 💎 How are you? Just checking if you're all set for the wealth-building training. Gidi Banks will be revealing his exact blueprint for making money online - the same one that's helped people quit their 9-5 jobs!`,
 
-                `Hi ${userName}! 👋 Just checking in. Have you joined the WhatsApp group? That's where all the action happens haha`,
+                `Hi ${userName}! 👋 Just wanted to touch base about the upcoming financial training. Gidi Banks is going to share some game-changing strategies that can help you start generating serious income, even as a complete beginner!`,
 
-                `Hey ${userName}! What's up? Hope you're getting excited for the training. Make sure to join the group if you haven't already!`,
+                `Hey ${userName}! What's up? 🚀 Are you excited to learn Gidi Banks' proven system for creating financial freedom? His students are crushing it right now, even in this economy. This training could be your turning point!`,
 
-                `Morning/Afternoon ${userName}! (depending on when you're reading this lol) 😄 Ready for the classes? They're gonna be game-changers!`
+                `Good day ${userName}! 💼 Ready to discover how you can start making money online? Gidi Banks has helped ordinary people create extraordinary income, and he's about to share his exact methods with you. It's going to be incredible!`
             ];
 
             return greetingResponses[Math.floor(Math.random() * greetingResponses.length)];
         }
 
-        // Check for questions about the class/training
-        if (lowerMsg.includes('class') || lowerMsg.includes('training') || lowerMsg.includes('course') || lowerMsg.includes('when') || lowerMsg.includes('start')) {
+        // Check for questions about the class/training - focused on financial aspects
+        if (lowerMsg.includes('class') || lowerMsg.includes('training') || lowerMsg.includes('course') || lowerMsg.includes('when') || lowerMsg.includes('start') || lowerMsg.includes('money') || lowerMsg.includes('earn') || lowerMsg.includes('income')) {
             const classResponses = [
-                `The classes are starting super soon ${userName}! 🔥 We'll announce everything in the WhatsApp group, so keep an eye out there. Trust me, the content we've prepared is gonna blow your mind!`,
+                `The financial freedom training is starting super soon ${userName}! 🔥 Gidi Banks will be revealing his complete system for generating 6-7 figures online. We'll announce the exact date in the WhatsApp group. People who've used these strategies are already seeing life-changing results!`,
 
-                `We're just putting the final touches on everything for the training ${userName}. I'm personally making sure it's all perfect before we start! All the details will be in the WhatsApp group - it's def worth the wait 😉`,
+                `We're just putting the final touches on the wealth-building training ${userName}. 💰 Gidi Banks wants to make sure everything is perfect before we start. You'll learn exactly how to create multiple income streams that can help you quit your 9-5 job. All the details will be in the WhatsApp group!`,
 
-                `Ahh I'm so excited for you to see what we've prepared! 🙌 The schedule will be posted in the group soon ${userName}. We're just making sure everything is 100% ready. It's gonna be epic!`,
+                `I'm so excited for you to see what Gidi Banks has prepared! 🙌 This training will show you step-by-step how to start making serious money online, even if you're a complete beginner. The schedule will be posted in the group soon. It's going to be a game-changer for your finances!`,
 
-                `Keep checking the WhatsApp group ${userName} - that's where we'll announce when everything kicks off. Between you and me, the content is insanely good! Can't wait for you to see it 🤩`,
+                `Keep checking the WhatsApp group ${userName} - that's where we'll announce when the financial training kicks off. 💎 Gidi Banks will be sharing the exact strategies his most successful students are using to generate consistent income online. This is knowledge that can literally change your life!`,
 
-                `Honestly, I can't wait to get started! The classes are gonna be amazing ${userName}. We're just finalizing some stuff and then we'll announce dates in the group. You're gonna love it!`,
+                `The money-making training is starting really soon! 💼 Gidi Banks is finalizing his blueprint for financial freedom that he'll be sharing with you. These are practical, actionable strategies that work even in today's economy. I'll make sure everyone gets notified in the WhatsApp group when we're ready to launch!`,
 
-                `So the training is starting really soon! Just wrapping up a few things. I'll make sure everyone gets notified in the WhatsApp group ${userName}. The content is fire 🔥 seriously!`,
+                `I was just reviewing some of the financial strategies Gidi Banks will be teaching, and they're incredible! 🚀 You'll learn exactly how to start generating income online using proven methods that have already helped thousands of people. We'll be announcing the start date in the group any day now!`,
 
-                `I was just working on the training materials yesterday actually! They're looking great ${userName}. We'll be announcing the start date in the group any day now. Make sure you're in there!`,
+                `The wealth-building training with Gidi Banks is about to start! 💵 You'll discover how to create multiple income streams that work for you 24/7. These are the same strategies that have helped ordinary people achieve extraordinary financial results. Keep an eye on the WhatsApp group for the exact start date!`,
 
-                `Can't give you the exact date yet (still finalizing some things) but it's SOON! 😄 Keep an eye on the WhatsApp group ${userName} - that's where I'll post all the details first.`
+                `Gidi Banks is putting the finishing touches on the financial freedom training! 🔑 You'll learn his step-by-step system for making money online - the same one that's helped his students generate 6-7 figures. We'll announce everything in the WhatsApp group very soon. This training will be worth every second of your time!`
             ];
 
             return classResponses[Math.floor(Math.random() * classResponses.length)];
@@ -411,6 +452,25 @@ async function generateFocusedResponse(message, userName, client, M) {
             (lowerMsg === "yes") || (lowerMsg === "yeah") || (lowerMsg === "yep") || (lowerMsg === "sure") || (lowerMsg === "ok")) {
 
             console.log("🔗 Affirmative response to group link question detected");
+
+            // If this is a response to "have you joined the group?" and they say yes, mark them as joined
+            if (hasJoined === undefined && !lowerMsg.includes('link') && !lowerMsg.includes('send')) {
+                console.log(`🎉 User ${M.pushName} (${M.sender}) affirmed they've joined the group`);
+
+                // Mark user as having joined the group
+                await groupJoinedTable.set(M.sender, true);
+
+                // Generate a personalized response
+                const joinedResponses = [
+                    `That's awesome ${userName}! 🎉 You're all set for the training now. I'll be sharing some amazing content there soon!`,
+                    `Perfect ${userName}! 👍 You're now officially part of the training. Get ready for some incredible classes!`,
+                    `Great job ${userName}! 🙌 You're now all set for the training. Can't wait for you to see what we've prepared!`,
+                    `Excellent ${userName}! 🔥 You're now fully registered for the training. It's going to be amazing!`,
+                    `Fantastic ${userName}! ✨ You're all set for the training now. Looking forward to seeing you participate!`
+                ];
+
+                return joinedResponses[Math.floor(Math.random() * joinedResponses.length)];
+            }
 
             // This is an affirmative response to a question about the group link - send it immediately
             try {
@@ -460,25 +520,48 @@ async function generateFocusedResponse(message, userName, client, M) {
 
         // Check for questions about the group
         if (lowerMsg.includes('group') || lowerMsg.includes('whatsapp') || lowerMsg.includes('join') || lowerMsg.includes('link')) {
-            const groupResponses = [
-                `Have you joined the WhatsApp group yet ${userName}? That's literally where everything happens! Need the link again? Just say the word and I'll send it over. The group's already pretty active btw! 📱`,
+            // Different responses based on whether the user has already joined
+            if (hasJoined) {
+                // User has already joined the group
+                const joinedGroupResponses = [
+                    `The WhatsApp group is where all the action happens ${userName}! I'm glad you're already in there. Keep an eye on it for important announcements about the training! 📱`,
 
-                `Omg the WhatsApp group is super important for the training ${userName}! We share all the good stuff there - announcements, materials, everything. Let me know if you need help joining! 🔗`,
+                    `Since you're already in the WhatsApp group ${userName}, make sure you check it regularly. That's where we'll be posting all the updates about the training! 🔔`,
 
-                `Make sure you're in the WhatsApp group ${userName}! That's where all the magic happens haha. We'll be dropping some exclusive content there soon that you def don't wanna miss! 💬`,
+                    `The WhatsApp group is super important ${userName}! I'm glad you've already joined. We'll be sharing some exclusive content there soon that you definitely don't want to miss! 💬`,
 
-                `So the WhatsApp group is basically command central for everything ${userName} 😄 All updates go there first. Not in yet? Just let me know and I'll hook you up with the link! 📲`,
+                    `I'm in the WhatsApp group every day sharing updates and answering questions ${userName}. Glad you're already part of it! 🙌`,
 
-                `The group is where it's at ${userName}! I'm in there everyday sharing updates and answering questions. Let me know if you need the link again - no problem at all!`,
+                    `The WhatsApp group is where everything happens ${userName}! Since you're already in, you're all set for the training. Just make sure to check it regularly! ✅`,
 
-                `Yesss the WhatsApp group! It's already pretty active ${userName}. Some people are already connecting and chatting about the training. Need me to resend the link?`,
+                    `I was just in the WhatsApp group earlier today actually! It's getting pretty active. Glad you're already part of it ${userName}! 🚀`,
 
-                `I was just in the WhatsApp group earlier today actually! It's where we'll be posting all the important stuff. You should definitely join if you haven't already ${userName}!`,
+                    `The WhatsApp group is essential for the training ${userName}. That's where I'll be posting all the updates about when classes start. Thanks for already being part of it! 👍`
+                ];
 
-                `The WhatsApp group is essential tbh. That's where I'll be posting all the updates about when classes start and sharing materials. Let me know if you need help joining ${userName}!`
-            ];
+                return joinedGroupResponses[Math.floor(Math.random() * joinedGroupResponses.length)];
+            } else {
+                // User hasn't joined the group yet
+                const notJoinedGroupResponses = [
+                    `Have you joined the WhatsApp group yet ${userName}? That's literally where everything happens! Need the link? Just say the word and I'll send it over. The group's already pretty active btw! 📱`,
 
-            return groupResponses[Math.floor(Math.random() * groupResponses.length)];
+                    `Omg the WhatsApp group is super important for the training ${userName}! We share all the good stuff there - announcements, materials, everything. Let me know if you need help joining! 🔗`,
+
+                    `Make sure you join the WhatsApp group ${userName}! That's where all the magic happens haha. We'll be dropping some exclusive content there soon that you def don't wanna miss! 💬`,
+
+                    `So the WhatsApp group is basically command central for everything ${userName} 😄 All updates go there first. Not in yet? Just let me know and I'll hook you up with the link! 📲`,
+
+                    `The group is where it's at ${userName}! I'm in there everyday sharing updates and answering questions. Need the link? Just ask! 🔗`,
+
+                    `Yesss the WhatsApp group! It's already pretty active ${userName}. Some people are already connecting and chatting about the training. Need me to send you the link?`,
+
+                    `I was just in the WhatsApp group earlier today actually! It's where we'll be posting all the important stuff. You should definitely join if you haven't already ${userName}!`,
+
+                    `The WhatsApp group is essential tbh. That's where I'll be posting all the updates about when classes start and sharing materials. Let me know if you need help joining ${userName}!`
+                ];
+
+                return notJoinedGroupResponses[Math.floor(Math.random() * notJoinedGroupResponses.length)];
+            }
         }
 
         // Check for thank you messages
@@ -504,31 +587,31 @@ async function generateFocusedResponse(message, userName, client, M) {
             return thankResponses[Math.floor(Math.random() * thankResponses.length)];
         }
 
-        // Default responses for other messages
+        // Default responses for other messages - focused on making money with Gidi Banks
         const defaultResponses = [
-            `Hey ${userName}! Just checking in to see how you're doing. Remember to stay active in the WhatsApp group - that's where I post all the important stuff about the training. It's starting soon and it's gonna be amazing! 🔥`,
+            `${userName}, are you ready to learn how to generate serious income online? 💰 Gidi Banks has helped thousands of people just like you create financial freedom. In this training, you'll learn exactly how to start making money even if you're a complete beginner. The WhatsApp group is where we'll share all the strategies!`,
 
-            `${userName}! I'm honestly so excited for you to experience this training. We've put together some incredible content that's gonna transform your skills. Make sure you're in the WhatsApp group for all the updates! 📚`,
+            `I'm excited for you to join this training ${userName}! Gidi Banks is going to reveal his proven system for making 6-7 figures online. People who've followed his methods have been able to quit their jobs and build real wealth. Are you ready to transform your finances? 🚀`,
 
-            `Sooo the training is starting soon ${userName}! You ready? 😄 Make sure you're checking the WhatsApp group regularly - that's where all the announcements will be. We've got some amazing classes lined up!`,
+            `${userName}, imagine waking up to payment notifications on your phone every single day. That's what Gidi Banks' students experience after implementing his strategies. This training will show you step-by-step how to create multiple income streams that work for you 24/7. It's life-changing!`,
 
-            `Just wanted to check in and make sure you're all set for the training ${userName}. The WhatsApp group is where everything happens, so keep an eye on it! The classes are gonna be game-changers for real! ✨`,
+            `The financial strategies Gidi Banks will be teaching in this class have helped people go from struggling to making consistent income online ${userName}. We're talking about practical, actionable methods that work even in today's economy. Are you serious about changing your financial situation? 💼`,
 
-            `Hey there! Just a quick reminder about the WhatsApp group ${userName} - that's where you'll get all the updates about the training. Don't wanna miss anything important!`,
+            `${userName}, what would your life look like if money was no longer a problem? That's what this training is designed to help you achieve. Gidi Banks will be sharing the exact blueprint he's used to help ordinary people create extraordinary income. The opportunity is right in front of you!`,
 
-            `${userName}! How's it going? Just making sure you're ready for the classes. They're starting soon and I'm so excited for you to see what we've prepared!`,
+            `I've seen people completely transform their lives after learning Gidi Banks' money-making strategies ${userName}. We're talking about regular people now making 6-7 figures from their phone or laptop. If you're serious about financial freedom, this training is your golden ticket. Are you ready to take action? 💯`,
 
-            `I was just thinking about the upcoming training and wanted to check in ${userName}. Have you joined the WhatsApp group yet? That's where all the important stuff gets posted first.`,
+            `${userName}, Gidi Banks is known for teaching practical, no-nonsense methods to make serious money online. His students are crushing it right now, even in this economy. This isn't about get-rich-quick schemes - it's about building real, sustainable income streams that can change your life forever.`,
 
-            `Hey! Just wanted to say I'm looking forward to having you in the training ${userName}. It's gonna be such a great experience. Make sure you're in the WhatsApp group!`
+            `The difference between people who struggle financially and those who thrive is knowledge and implementation ${userName}. In this training, Gidi Banks will give you both the knowledge AND the step-by-step implementation plan to start generating income quickly. Are you ready to be one of our success stories? 🔥`
         ];
 
         return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
 
     } catch (error) {
         console.error("🚨 Error generating focused response:", error);
-        // Even the fallback should be focused on the training
-        return `Hey ${userName}, just making sure you're ready for the upcoming classes! They're going to be incredible. Make sure you're active in the WhatsApp group for all the important announcements. 🚀`;
+        // Even the fallback should be focused on financial training
+        return `Hey ${userName}, are you ready to learn Gidi Banks' proven system for generating serious income online? His students are making 6-7 figures using these exact strategies. Make sure you're active in the WhatsApp group - that's where all the wealth-building action happens! This training could be the financial breakthrough you've been looking for. 💰`;
     }
 }
 
@@ -573,6 +656,9 @@ module.exports = MessageHandler = async (messages, client) => {
 
         // Create a table for tracking welcome messages if it doesn't exist
         const welcomeMessageTable = client.DB.table('welcomeMessages');
+
+        // Create a table for tracking users who have joined the group
+        const groupJoinedTable = client.DB.table('groupJoined');
 
         // Create a table for welcome message settings if it doesn't exist
         const configTable = client.DB.table('config');
@@ -620,6 +706,10 @@ module.exports = MessageHandler = async (messages, client) => {
                     // Wait for the rest of the delay
                     await new Promise(resolve => setTimeout(resolve, delay * 0.2));
 
+                    // Mark user as having joined the group
+                    await groupJoinedTable.set(M.sender, true);
+                    console.log(`✅ User ${M.pushName} (${M.sender}) marked as having joined the group`);
+
                     // Send the completion response
                     await client.sendMessage(M.from, { text: completionResponse }, { quoted: M });
                     console.log(`✅ Completion response sent to ${M.pushName} (${M.sender})`);
@@ -629,16 +719,16 @@ module.exports = MessageHandler = async (messages, client) => {
                     const shouldSendSecondFollowUp = shouldSendFollowUp && Math.random() < 0.2; // 20% of those get a third message
 
                     if (shouldSendFollowUp) {
-                        // Generate a follow-up message
+                        // Generate a follow-up message focused on financial training
                         const followUpMessages = [
-                            `Oh and ${userName}, don't forget to introduce yourself in the group! It's a great way to connect with everyone.`,
-                            `Also ${userName}, we'll be sharing some pre-class materials in the group soon, so keep an eye out!`,
-                            `By the way ${userName}, if you have any questions before we start, feel free to ask in the group or message me directly.`,
-                            `One more thing ${userName} - make sure your notifications are turned on for the group so you don't miss anything!`,
-                            `And ${userName}, you might want to save some space on your phone for the training materials we'll be sharing.`,
-                            `Almost forgot to mention ${userName}, we'll be doing some live sessions too, so get ready!`,
-                            `Also, if you know anyone else who might be interested in this training ${userName}, let them know! The more the merrier.`,
-                            `I'm really looking forward to seeing your progress in this training ${userName}!`
+                            `Oh and ${userName}, don't forget to introduce yourself in the group! Many of Gidi Banks' successful students have formed valuable business connections there.`,
+                            `Also ${userName}, we'll be sharing some pre-training financial resources in the group soon. These materials have helped people start making money even before the official training begins!`,
+                            `By the way ${userName}, if you have any questions about creating financial freedom, feel free to ask in the group. Many of Gidi Banks' successful students are active there and love to help newcomers!`,
+                            `One more thing ${userName} - make sure your notifications are turned on for the group! Gidi Banks sometimes shares time-sensitive money-making opportunities there that you won't want to miss.`,
+                            `And ${userName}, you might want to prepare a notebook for this training. Gidi Banks will be sharing specific strategies and formulas for generating income that you'll definitely want to write down.`,
+                            `Almost forgot to mention ${userName}, Gidi Banks will be doing some live Q&A sessions where he answers specific questions about building wealth. These are incredibly valuable!`,
+                            `Also, if you know anyone else who's serious about creating financial freedom ${userName}, let them know about this training! Gidi Banks' methods work for anyone willing to implement them.`,
+                            `I'm really looking forward to seeing your financial transformation after this training ${userName}! So many people have completely changed their lives using Gidi Banks' strategies.`
                         ];
 
                         const followUpMessage = followUpMessages[Math.floor(Math.random() * followUpMessages.length)];
@@ -654,11 +744,11 @@ module.exports = MessageHandler = async (messages, client) => {
                         // Occasionally send a second follow-up (rare, makes it feel very human)
                         if (shouldSendSecondFollowUp) {
                             const secondFollowUpMessages = [
-                                `Oh! And make sure to check the pinned messages in the group too ${userName}. Important stuff there!`,
-                                `Almost forgot - we'll be starting with some basics, so don't worry if you're new to this ${userName}.`,
-                                `And ${userName}, don't be shy in the group! Everyone's super friendly and helpful.`,
-                                `Just remembered ${userName} - we'll be giving out some bonuses to the most active participants!`,
-                                `One last thing ${userName} - there'll be some homework too, but I promise it'll be fun!`
+                                `Oh! And make sure to check the pinned messages in the group too ${userName}. Gidi Banks often pins specific financial strategies and resources there that have helped people start making money quickly!`,
+                                `Almost forgot - Gidi Banks will be starting with some beginner-friendly money-making methods, so don't worry if you're completely new to online income ${userName}. Many of his most successful students started from zero!`,
+                                `And ${userName}, don't hesitate to ask questions in the group! Many people who are already making 6-7 figures using Gidi Banks' methods are active there and love to help newcomers on their financial journey.`,
+                                `Just remembered ${userName} - Gidi Banks will be giving out some special bonuses to the most active participants! These include additional income strategies that aren't shared in the main training.`,
+                                `One last thing ${userName} - there will be some implementation tasks during the training, but they're designed to help you start generating real income as quickly as possible!`
                             ];
 
                             const secondFollowUpMessage = secondFollowUpMessages[Math.floor(Math.random() * secondFollowUpMessages.length)];
@@ -839,43 +929,145 @@ module.exports = MessageHandler = async (messages, client) => {
         } else {
             // First, check for direct group link requests to handle them immediately
             const lowerBody = body.toLowerCase().trim();
+
+            // Check if user is saying they've joined the group
             if (!isGroup &&
-                (lowerBody.includes('link') ||
-                 lowerBody.includes('join') ||
-                 (lowerBody.includes('group') && (lowerBody.includes('send') || lowerBody.includes('give') || lowerBody.includes('share'))) ||
-                 (lowerBody === "no" && await welcomeMessageTable.get(M.sender)))) {
+                (lowerBody.includes('joined') || lowerBody.includes('i have joined') || lowerBody.includes('i joined') ||
+                 lowerBody.includes('i am in') || lowerBody.includes("i'm in") || lowerBody.includes('i am now in'))) {
 
-                console.log("🔍 Direct group link request detected in main flow");
+                console.log(`🎉 User ${M.pushName} (${M.sender}) says they've joined the group`);
 
-                // Get the group link directly from QuickDB
-                try {
-                    const configTable = client.DB.table('config');
-                    const defaultGroupLink = 'https://chat.whatsapp.com/default';
-                    const groupLink = await configTable.get('groupLink') || defaultGroupLink;
+                // Mark user as having joined the group
+                await groupJoinedTable.set(M.sender, true);
 
-                    if (!groupLink || groupLink === defaultGroupLink) {
-                        console.warn("⚠️ No custom group link set in admin panel");
-                        await M.reply("🟨 Sorry, the group link hasn't been set up yet. Please try again later.");
-                        return;
-                    }
+                // Generate a personalized response
+                const userName = M.pushName || 'there';
+                const joinedResponses = [
+                    `That's awesome ${userName}! 🎉 You're all set for the training now. I'll be sharing some amazing content there soon!`,
+                    `Perfect ${userName}! 👍 You're now officially part of the training. Get ready for some incredible classes!`,
+                    `Great job ${userName}! 🙌 You're now all set for the training. Can't wait for you to see what we've prepared!`,
+                    `Excellent ${userName}! 🔥 You're now fully registered for the training. It's going to be amazing!`,
+                    `Fantastic ${userName}! ✨ You're all set for the training now. Looking forward to seeing you participate!`
+                ];
 
+                const response = joinedResponses[Math.floor(Math.random() * joinedResponses.length)];
+
+                // Show typing indicator
+                await client.sendPresenceUpdate('composing', M.from);
+                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+
+                // Send the response
+                await client.sendMessage(M.from, { text: response }, { quoted: M });
+                console.log(`✅ Joined confirmation response sent to ${M.pushName} (${M.sender})`);
+
+                return; // Exit early as we've handled this request
+            }
+
+            // Check for direct group link requests or refusals
+            if (!isGroup) {
+                // Handle refusals to join the group
+                if ((lowerBody.includes("no") && lowerBody.includes("won't join")) ||
+                    (lowerBody.includes("not") && lowerBody.includes("joining")) ||
+                    (lowerBody.includes("don't want") && lowerBody.includes("join")) ||
+                    (lowerBody.includes("not interested"))) {
+
+                    console.log(`⚠️ User ${M.pushName} (${M.sender}) refusing to join the group`);
+
+                    // Generate a persuasive response about why they should join
                     const userName = M.pushName || 'there';
-                    const caption = await generateGroupLinkCaption(userName);
+                    const persuasiveResponses = [
+                        `${userName}, I completely understand your hesitation. But here's what you'll miss out on: Gidi Banks will be sharing his exact blueprint for making 6-7 figures online in that group. People are already implementing these strategies and seeing real results. This isn't just another course - it's a complete system for financial freedom. Are you sure you want to miss this opportunity? 🤔`,
 
-                    // Show typing indicator
+                        `I respect your decision ${userName}, but let me share something with you. The WhatsApp group is where Gidi Banks will be revealing his most profitable income strategies - the same ones that have helped ordinary people quit their 9-5 jobs. These are practical, step-by-step methods that work even if you're starting from zero. This could be the financial breakthrough you've been looking for. Would you reconsider? 💰`,
+
+                        `That's totally your choice ${userName}, but just so you know - the WhatsApp group is where all the magic happens. Gidi Banks will be sharing exclusive money-making strategies that won't be available anywhere else. His students are making life-changing income using these methods. If you're serious about creating financial freedom, this group is absolutely essential. Think about it? 🚀`,
+
+                        `I understand ${userName}, but here's why you might want to reconsider: The WhatsApp group is where Gidi Banks shares the exact strategies that have helped people go from struggling to making consistent income online. We're talking about real, practical methods to generate serious money. This training has been a turning point for so many people. Don't you want to at least check it out? 💎`,
+
+                        `${userName}, I get that you might be skeptical - there are a lot of fake gurus out there. But Gidi Banks is different. His students are actually making money using his methods. In the WhatsApp group, he'll be sharing his proven system for generating multiple income streams. People are literally changing their financial futures with this information. Are you sure you want to pass on this? 🤷‍♂️`
+                    ];
+
+                    const response = persuasiveResponses[Math.floor(Math.random() * persuasiveResponses.length)];
+
+                    // Show typing indicator for longer (this is a longer, more thoughtful message)
                     await client.sendPresenceUpdate('composing', M.from);
-                    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+                    await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
 
-                    // Send the link
-                    await client.sendMessage(M.from, {
-                        text: `${caption}\n\n${groupLink}`
-                    }, { quoted: M });
-                    console.log("✅ Group link sent from direct detection in main flow");
+                    // Send the persuasive response
+                    await client.sendMessage(M.from, { text: response }, { quoted: M });
+                    console.log("✅ Persuasive response sent to user refusing to join group");
 
                     return; // Exit early as we've handled this request
-                } catch (error) {
-                    console.error("🚨 Error sending group link from direct detection:", error);
-                    // Continue with normal processing if there was an error
+                }
+
+                // Handle direct group link requests
+                if (lowerBody.includes('link') ||
+                    lowerBody.includes('join') ||
+                    (lowerBody.includes('group') && (lowerBody.includes('send') || lowerBody.includes('give') || lowerBody.includes('share'))) ||
+                    lowerBody === "no" ||
+                    lowerBody.includes("haven't joined") ||
+                    lowerBody.includes("have not joined") ||
+                    lowerBody.includes("not joined")) {
+
+                    console.log("🔍 Direct group link request detected in main flow");
+
+                    // Check if user has already joined the group
+                    const hasJoined = await groupJoinedTable.get(M.sender);
+
+                    if (hasJoined && !lowerBody.includes('link') && !lowerBody.includes('send') && !lowerBody.includes('give')) {
+                        console.log(`⚠️ User ${M.pushName} (${M.sender}) already marked as joined but requesting link again`);
+
+                        // Generate a personalized response
+                        const userName = M.pushName || 'there';
+                        const alreadyJoinedResponses = [
+                            `Hey ${userName}, I thought you already joined the group! Do you need the link again?`,
+                            `${userName}, didn't you already join the group? Let me know if you need the link again.`,
+                            `I remember you saying you joined the group ${userName}. Did you leave or need the link again?`,
+                            `${userName}, I have you marked as already in the group. Do you need the link again?`
+                        ];
+
+                        const response = alreadyJoinedResponses[Math.floor(Math.random() * alreadyJoinedResponses.length)];
+
+                        // Show typing indicator
+                        await client.sendPresenceUpdate('composing', M.from);
+                        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+
+                        // Send the response
+                        await client.sendMessage(M.from, { text: response }, { quoted: M });
+
+                        return; // Exit early as we've handled this request
+                    }
+
+                    // Get the group link directly from QuickDB
+                    try {
+                        const configTable = client.DB.table('config');
+                        const defaultGroupLink = 'https://chat.whatsapp.com/default';
+                        const groupLink = await configTable.get('groupLink') || defaultGroupLink;
+
+                        if (!groupLink || groupLink === defaultGroupLink) {
+                            console.warn("⚠️ No custom group link set in admin panel");
+                            await M.reply("🟨 Sorry, the group link hasn't been set up yet. Please try again later.");
+                            return;
+                        }
+
+                        const userName = M.pushName || 'there';
+                        const caption = await generateGroupLinkCaption(userName);
+
+                        // Show typing indicator
+                        await client.sendPresenceUpdate('composing', M.from);
+                        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+
+                        // Send the link
+                        await client.sendMessage(M.from, {
+                            text: `${caption}\n\n${groupLink}`
+                        }, { quoted: M });
+                        console.log("✅ Group link sent from direct detection in main flow");
+
+                        return; // Exit early as we've handled this request
+                    } catch (error) {
+                        console.error("🚨 Error sending group link from direct detection:", error);
+                        // Continue with normal processing if there was an error
+                    }
                 }
             }
 
@@ -1010,16 +1202,16 @@ module.exports = MessageHandler = async (messages, client) => {
                         // Send the main response
                         await M.reply(response);
 
-                        // Generate a follow-up message
+                        // Generate a follow-up message focused on financial training
                         const followUpMessages = [
-                            `Oh and ${userName}, make sure you're checking the WhatsApp group regularly!`,
-                            `By the way ${userName}, have you joined the WhatsApp group yet?`,
-                            `Also ${userName}, the training is starting really soon so stay tuned!`,
-                            `Just a reminder ${userName}, all important announcements will be in the group.`,
-                            `One more thing ${userName} - don't forget to save this number!`,
-                            `Almost forgot to mention ${userName}, we'll be sharing some exclusive content in the group soon!`,
-                            `And ${userName}, feel free to ask if you have any questions about the training!`,
-                            `I'm so excited for you to start this journey ${userName}!`
+                            `Oh and ${userName}, make sure you're checking the WhatsApp group regularly! Gidi Banks often shares quick money-making tips there that you can implement immediately.`,
+                            `By the way ${userName}, have you joined the WhatsApp group yet? That's where Gidi Banks will be revealing his complete system for generating 6-7 figures online.`,
+                            `Also ${userName}, the financial freedom training is starting really soon! People who've used Gidi Banks' strategies are already seeing life-changing results.`,
+                            `Just a reminder ${userName}, all important announcements about the wealth-building training will be in the group. Gidi Banks sometimes shares time-sensitive opportunities there!`,
+                            `One more thing ${userName} - Gidi Banks' students are making serious money using his methods. This training could be the financial breakthrough you've been looking for!`,
+                            `Almost forgot to mention ${userName}, Gidi Banks will be sharing some exclusive income strategies in the group that won't be available anywhere else!`,
+                            `And ${userName}, feel free to ask if you have any questions about creating financial freedom! Gidi Banks has helped thousands of people just like you transform their finances.`,
+                            `I'm so excited for you to start this wealth-building journey ${userName}! So many people have completely changed their financial situation after learning Gidi Banks' strategies.`
                         ];
 
                         const followUpMessage = followUpMessages[Math.floor(Math.random() * followUpMessages.length)];

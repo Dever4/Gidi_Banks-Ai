@@ -39,7 +39,7 @@ global.connectedNumber = null
 // Middleware
 app.use(bodyParser.json())
 app.use(cors({
-  origin: 'http://localhost:3000'
+  origin: '*' // Allow requests from any origin in production
 }))
 
 // Serve static files from the React app
