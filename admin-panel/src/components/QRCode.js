@@ -126,7 +126,8 @@ function QRCode() {
     }, 45000); // 45 seconds
 
     // Set up Socket.IO connection for real-time updates
-    socketRef.current = io('http://localhost:8080');
+    // Use relative URL for Socket.IO to work in both development and production
+    socketRef.current = io(window.location.origin);
 
     socketRef.current.on('connect', () => {
       console.log('Connected to WebSocket server');

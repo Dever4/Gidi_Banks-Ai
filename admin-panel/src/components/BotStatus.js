@@ -32,7 +32,8 @@ function BotStatus() {
     fetchStatus();
 
     // Set up Socket.IO connection for real-time updates
-    const socket = io('http://localhost:8080');
+    // Use relative URL for Socket.IO to work in both development and production
+    const socket = io(window.location.origin);
 
     socket.on('connect', () => {
       console.log('Connected to WebSocket server');
