@@ -32,7 +32,7 @@ function Settings() {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/settings/group-link', {
+      const response = await axios.get('https://gidibanks-ai-production.up.railway.app/api/settings/group-link', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setGroupLink(response.data.groupLink);
@@ -49,7 +49,7 @@ function Settings() {
     setWelcomeLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/settings/welcome-message', {
+      const response = await axios.get('https://gidibanks-ai-production.up.railway.app/api/settings/welcome-message', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -148,7 +148,7 @@ function Settings() {
 
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        '/api/settings/welcome-message',
+        'https://gidibanks-ai-production.up.railway.app/api/settings/welcome-message',
         {
           whatsappTrainingLink,
           telegramCommunityLink,
