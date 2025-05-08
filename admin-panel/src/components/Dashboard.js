@@ -41,26 +41,72 @@ function Dashboard() {
     const fetchBots = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.get('/api/bots', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setBotInstances(response.data);
 
-        // Set active bot
-        const activeBotInstance = response.data.find(bot => bot.isActive);
-        if (activeBotInstance) {
-          setActiveBot(activeBotInstance);
+        // First try to get bot instances from the API
+        try {
+          const response = await axios.get('/api/bots', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (response.data && Array.isArray(response.data)) {
+            setBotInstances(response.data);
+
+            // Set active bot
+            const activeBotInstance = response.data.find(bot => bot.isActive);
+            if (activeBotInstance) {
+              setActiveBot(activeBotInstance);
+            }
+            return; // Exit if successful
+          }
+        } catch (apiErr) {
+          console.error('Error fetching bots from API:', apiErr);
+          // Continue to fallback method
+        }
+
+        // Fallback: Get bot status from the status endpoint
+        const statusResponse = await axios.get('/api/status');
+        if (statusResponse.data) {
+          const { state, phoneNumber } = statusResponse.data;
+
+          // Create a default bot instance
+          const defaultBot = {
+            id: 1,
+            name: 'WhatsApp Bot',
+            status: state || 'unknown',
+            isActive: true,
+            phoneNumber: phoneNumber || null
+          };
+
+          setBotInstances([defaultBot]);
+          setActiveBot(defaultBot);
         }
       } catch (err) {
-        console.error('Error fetching bots:', err);
+        console.error('Error fetching bot status:', err);
+
+        // Create a minimal fallback bot instance
+        const fallbackBot = {
+          id: 1,
+          name: 'WhatsApp Bot',
+          status: 'unknown',
+          isActive: true
+        };
+
+        setBotInstances([fallbackBot]);
+        setActiveBot(fallbackBot);
       }
     };
 
     // Set up Socket.IO connection for real-time updates
-    socketRef.current = io('http://localhost:8080');
+    // Use relative URL to connect to the current host
+    socketRef.current = io(window.location.origin);
 
     socketRef.current.on('connect', () => {
       console.log('Connected to WebSocket server for dashboard updates');
+    });
+
+    socketRef.current.on('connect_error', (error) => {
+      console.error('Socket.IO connection error:', error);
+      setError('Failed to connect to WebSocket server. Dashboard updates may not be real-time.');
     });
 
     // Listen for bot instances updates
@@ -373,7 +419,7 @@ function Dashboard() {
           </div>
           <div>
             <h3 style={{ fontSize: '1rem', marginBottom: '8px' }}>Server</h3>
-            <div>localhost:8080</div>
+            <div>{window.location.host}</div>
           </div>
           {activeBot && (
             <div>

@@ -3,6 +3,24 @@ import axios from 'axios';
 import io from 'socket.io-client';
 import { Link } from 'react-router-dom';
 
+// Function to load QRCode.js from CDN
+const loadQRCodeScript = () => {
+  return new Promise((resolve, reject) => {
+    // Check if already loaded
+    if (window.QRCode) {
+      resolve(window.QRCode);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js';
+    script.async = true;
+    script.onload = () => resolve(window.QRCode);
+    script.onerror = reject;
+    document.body.appendChild(script);
+  });
+};
+
 function QRCode() {
   const [qrCode, setQrCode] = useState('');
   const [status, setStatus] = useState('waiting');
@@ -21,6 +39,65 @@ function QRCode() {
   const timerRef = useRef(null);
   const socketRef = useRef(null);
   const autoRefreshIntervalRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  // Function to generate QR code from raw data using client-side QRCode.js
+  const generateQRCodeFromRawData = async (rawData) => {
+    try {
+      console.log('Generating QR code from raw data:', rawData);
+
+      // Load QRCode.js from CDN if not already loaded
+      if (!window.QRCode) {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js';
+        script.async = true;
+
+        // Wait for script to load
+        await new Promise((resolve, reject) => {
+          script.onload = resolve;
+          script.onerror = reject;
+          document.body.appendChild(script);
+        });
+
+        console.log('QRCode.js loaded successfully');
+      }
+
+      // Create a temporary canvas element
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+
+      // Generate QR code on canvas
+      await new Promise((resolve, reject) => {
+        window.QRCode.toCanvas(canvas, rawData, {
+          width: 256,
+          margin: 4,
+          color: {
+            dark: '#000000',
+            light: '#ffffff'
+          }
+        }, (error) => {
+          if (error) {
+            console.error('Error generating QR code:', error);
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+
+      // Convert canvas to base64 image
+      const dataUrl = canvas.toDataURL('image/png');
+      setQrCode(dataUrl);
+      setQrGenerated(new Date());
+      setTimeLeft(60); // Reset timer to 60 seconds
+      console.log('QR code generated on client side successfully');
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+      setMessage('Failed to generate QR code. Please try again.');
+      setMessageType('error');
+    }
+  };
 
   // Function to fetch bot instances
   const fetchBotInstances = async () => {
@@ -102,13 +179,12 @@ function QRCode() {
           setTimeLeft(60); // Reset timer to 60 seconds
           console.log('Using provided QR code image from API');
         } else if (response.data.qrRaw) {
-          // If we only have raw QR data, we need to generate the QR code on the client side
+          // If we only have raw QR data, generate the QR code on the client side
           // This is a fallback for Railway deployments where image generation might fail
-          console.log('Raw QR data received from API but client-side generation not implemented');
+          console.log('Raw QR data received from API, generating QR code on client side');
 
-          // Set an error message to inform the user
-          setMessage('QR code data received but image generation failed. Please restart the bot or try again.');
-          setMessageType('warning');
+          // Generate QR code on client side
+          generateQRCodeFromRawData(response.data.qrRaw);
         } else if (response.data.message) {
           // If there's a message, display it
           setMessage(response.data.message);
@@ -159,17 +235,12 @@ function QRCode() {
         setQrCode(data.qrCode);
         console.log('Using provided QR code image');
       } else if (data.qrRaw) {
-        // If we only have raw QR data, we need to generate the QR code on the client side
+        // If we only have raw QR data, generate the QR code on the client side
         // This is a fallback for Railway deployments where image generation might fail
         console.log('Using raw QR data to generate QR code');
 
-        // In a real implementation, you would use a library like qrcode.js to generate
-        // the QR code image from the raw data. For now, we'll just log it.
-        console.log('Raw QR data available but client-side generation not implemented');
-
-        // Set an error message to inform the user
-        setMessage('QR code data received but image generation failed. Please restart the bot or try again.');
-        setMessageType('warning');
+        // Generate QR code on client side
+        generateQRCodeFromRawData(data.qrRaw);
       }
 
       setStatus(data.status);
