@@ -26,7 +26,7 @@ function Dashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await axios.get('/api/stats');
+        const response = await axios.get('https://gidibanks-ai-production.up.railway.app/api/stats');
         setStats(response.data);
         setLoading(false);
       } catch (err) {
@@ -44,7 +44,7 @@ function Dashboard() {
 
         // First try to get bot instances from the API
         try {
-          const response = await axios.get('/api/bots', {
+          const response = await axios.get('https://gidibanks-ai-production.up.railway.app/api/bots', {
             headers: { Authorization: `Bearer ${token}` }
           });
 
@@ -64,7 +64,7 @@ function Dashboard() {
         }
 
         // Fallback: Get bot status from the status endpoint
-        const statusResponse = await axios.get('/api/status');
+        const statusResponse = await axios.get('https://gidibanks-ai-production.up.railway.app/api/status');
         if (statusResponse.data) {
           const { state, phoneNumber } = statusResponse.data;
 
@@ -197,7 +197,7 @@ function Dashboard() {
   const handleRestart = async () => {
     setRestarting(true);
     try {
-      await axios.post('/api/restart');
+      await axios.post('https://gidibanks-ai-production.up.railway.app/api/restart');
       setMessage('Bot restart initiated. Please wait for it to reconnect.');
       setMessageType('info');
       setBotStatus('connecting');
@@ -215,7 +215,7 @@ function Dashboard() {
       setMessage('');
 
       const token = localStorage.getItem('token');
-      const response = await axios.post(`/api/bots/${botId}/activate`, {}, {
+      const response = await axios.post(`https://gidibanks-ai-production.up.railway.app/api/bots/${botId}/activate`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
