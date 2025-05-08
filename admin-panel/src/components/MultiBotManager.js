@@ -60,7 +60,7 @@ function MultiBotManager() {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/bots', {
+      const response = await axios.get('https://gidibanks-ai-production.up.railway.app/api/bots', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setBots(response.data);
@@ -82,7 +82,7 @@ function MultiBotManager() {
     try {
       setError('');
       const token = localStorage.getItem('token');
-      const response = await axios.post(`/api/bots/${botId}/activate`, {}, {
+      const response = await axios.post(`https://gidibanks-ai-production.up.railway.app/api/bots/${botId}/activate`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -115,7 +115,7 @@ function MultiBotManager() {
   const addBot = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post('/api/bots', {}, {
+      const response = await axios.post('https://gidibanks-ai-production.up.railway.app/api/bots', {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -135,7 +135,7 @@ function MultiBotManager() {
 
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`/api/bots/${botId}`, {
+      await axios.delete(`https://gidibanks-ai-production.up.railway.app/api/bots/${botId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
