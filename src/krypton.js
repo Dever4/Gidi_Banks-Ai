@@ -7,7 +7,7 @@ const {
 const { QuickDB } = require('quick.db')
 const { getConfig } = require('./getConfig')
 const { Collection } = require('discord.js')
-const MessageHandler = require('./Handlers/Message')
+const { MessageHandler } = require('./Handlers/Message')
 const GroupUpdateHandler = require('./Handlers/GroupUpdate')
 const CallHandler = require('./Handlers/Call')
 const contact = require('./Helper/contacts')
@@ -21,12 +21,14 @@ const P = require('pino')
 const { Boom } = require('@hapi/boom')
 const { join } = require('path')
 const { imageSync } = require('qr-image')
+const QRCode = require('qrcode')
 const { readdirSync, remove, existsSync } = require('fs-extra')
 const bodyParser = require('body-parser')
 const cors = require('cors')
 const jwt = require('jsonwebtoken')
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
 
 const JWT_SECRET = process.env.JWT_SECRET || 'whatsapp-bot-admin-secret'
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com'
@@ -192,24 +194,47 @@ const start = async () => {
             client.log(`[${chalk.red('!')}]`, 'white')
             client.log(`Scan the QR code above | You can also authenticate at http://localhost:${port}`, 'blue')
 
-            // Store the raw QR data - this is critical for Railway deployment
+            // Store the raw QR data
             client.qrRaw = update.qr
             client.qrTimestamp = Date.now()
 
-            try {
-                // Try to generate QR image
-                client.QR = imageSync(update.qr)
-                console.log(`✅ QR code generated successfully at ${new Date(client.qrTimestamp).toLocaleString()}`)
+            // ALWAYS print the raw QR data in a format that's easy to copy
+            console.log('\n\n==============================================================')
+            console.log('🔴 IMPORTANT: COPY THIS QR CODE DATA TO USE WITH ONLINE QR GENERATOR 🔴')
+            console.log('==============================================================')
+            console.log(update.qr)
+            console.log('==============================================================')
+            console.log('Go to https://www.the-qrcode-generator.com/ and paste this data to generate a scannable QR code')
+            console.log('==============================================================\n\n')
 
-                // For Railway deployment, log a special message with the QR data
-                if (process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN) {
-                    console.log('📱 RAILWAY DEPLOYMENT DETECTED - QR CODE DATA:')
-                    console.log(update.qr)
-                    console.log('📱 Copy this data to a QR code generator if needed')
+            try {
+                // First try with qr-image
+                try {
+                    client.QR = imageSync(update.qr);
+                    console.log(`✅ QR code generated successfully with qr-image at ${new Date(client.qrTimestamp).toLocaleString()}`);
+                } catch (qrImageError) {
+                    console.error('❌ Error generating QR code with qr-image:', qrImageError);
+
+                    // Fallback to qrcode library
+                    try {
+                        const qrBuffer = await (async () => {
+                            return new Promise((resolve, reject) => {
+                                QRCode.toBuffer(update.qr, (err, buffer) => {
+                                    if (err) reject(err);
+                                    else resolve(buffer);
+                                });
+                            });
+                        })();
+                        client.QR = qrBuffer;
+                        console.log(`✅ QR code generated successfully with qrcode library at ${new Date(client.qrTimestamp).toLocaleString()}`);
+                    } catch (qrcodeError) {
+                        console.error('❌ Error generating QR code with qrcode library:', qrcodeError);
+                        console.log('⚠️ Please use the QR code data above with an online QR generator');
+                    }
                 }
             } catch (qrError) {
-                console.error('❌ Error generating QR code image:', qrError)
-                // Even if image generation fails, we still have the raw QR data stored
+                console.error('❌ Error in QR code generation process:', qrError);
+                console.log('⚠️ Please use the QR code data above with an online QR generator');
             }
         }
         if (connection === 'close') {
@@ -361,8 +386,29 @@ const start = async () => {
             try {
                 // Try to generate a fresh QR code image from the raw data
                 console.log('Generating fresh QR code from raw data');
-                const qrImage = imageSync(client.qrRaw);
-                const qrCodeBase64 = qrImage.toString('base64');
+                let qrImage, qrCodeBase64;
+
+                // First try with qr-image
+                try {
+                    qrImage = imageSync(client.qrRaw);
+                    qrCodeBase64 = qrImage.toString('base64');
+                    console.log('Successfully generated QR code with qr-image');
+                } catch (qrImageError) {
+                    console.error('Error generating QR with qr-image:', qrImageError);
+
+                    // Fallback to qrcode library
+                    const qrBuffer = await (async () => {
+                        return new Promise((resolve, reject) => {
+                            QRCode.toBuffer(client.qrRaw, (err, buffer) => {
+                                if (err) reject(err);
+                                else resolve(buffer);
+                            });
+                        });
+                    })();
+                    qrImage = qrBuffer;
+                    qrCodeBase64 = qrBuffer.toString('base64');
+                    console.log('Successfully generated QR code with qrcode library');
+                }
 
                 // Store the newly generated image for future use
                 client.QR = qrImage;
@@ -974,6 +1020,89 @@ const start = async () => {
         }
     });
 
+    // Bot instances endpoint
+    app.get('/api/bots', authenticateToken, async (req, res) => {
+        try {
+            const configTable = client.DB.table('config');
+            let instances = await configTable.get('botInstances');
+
+            // If no instances exist, create a default one
+            if (!instances || !Array.isArray(instances) || instances.length === 0) {
+                instances = [
+                    {
+                        id: 1,
+                        name: 'Bot 1',
+                        status: client ? client.state || 'disconnected' : 'disconnected',
+                        isActive: true,
+                        sessionPath: 'session',
+                        lastActive: Date.now(),
+                        phoneNumber: global.connectedNumber || null,
+                        qrTimestamp: client ? client.qrTimestamp : null
+                    }
+                ];
+                await configTable.set('botInstances', instances);
+            }
+
+            res.json(instances);
+        } catch (error) {
+            console.error('Error fetching bot instances:', error);
+            res.status(500).json({ message: 'Failed to fetch bot instances' });
+        }
+    });
+
+    // Activate bot endpoint
+    app.post('/api/bots/:botId/activate', authenticateToken, async (req, res) => {
+        try {
+            const botId = parseInt(req.params.botId);
+
+            if (isNaN(botId)) {
+                return res.status(400).json({ message: 'Invalid bot ID' });
+            }
+
+            const configTable = client.DB.table('config');
+            let instances = await configTable.get('botInstances');
+
+            // If no instances exist, return error
+            if (!instances || !Array.isArray(instances) || instances.length === 0) {
+                return res.status(404).json({ message: 'No bot instances found' });
+            }
+
+            // Find the bot to activate
+            const botToActivate = instances.find(instance => instance.id === botId);
+            if (!botToActivate) {
+                return res.status(404).json({ message: `Bot with ID ${botId} not found` });
+            }
+
+            // Check if the bot is already active
+            if (botToActivate.isActive) {
+                return res.json({ message: 'Bot is already active', requiresNewQrCode: false });
+            }
+
+            // Update all instances to set only the selected one as active
+            instances = instances.map(instance => ({
+                ...instance,
+                isActive: instance.id === botId,
+                lastActive: instance.id === botId ? Date.now() : instance.lastActive
+            }));
+
+            await configTable.set('botInstances', instances);
+
+            // Emit updated bot instances via Socket.IO
+            io.emit('botInstances', instances);
+
+            // Determine if a new QR code will be needed
+            const requiresNewQrCode = botToActivate.status !== 'connected';
+
+            res.json({
+                message: `Bot ${botId} activated successfully`,
+                requiresNewQrCode
+            });
+        } catch (error) {
+            console.error('Error activating bot:', error);
+            res.status(500).json({ message: 'Failed to activate bot' });
+        }
+    });
+
     // Update welcome message links endpoint
     app.post('/api/settings/welcome-message', authenticateToken, async (req, res) => {
         try {
@@ -1020,23 +1149,7 @@ const start = async () => {
         }
     });
 
-    // Bot instances endpoints
-    app.get('/api/bots', authenticateToken, async (req, res) => {
-        try {
-            // Get bot instances from QuickDB
-            const configTable = client.DB.table('config');
-            let instances = await configTable.get('botInstances');
-
-            if (!instances || !Array.isArray(instances)) {
-                instances = [];
-            }
-
-            res.json(instances);
-        } catch (error) {
-            console.error('Error fetching bot instances:', error);
-            res.status(500).json({ message: 'Failed to fetch bot instances' });
-        }
-    });
+    // Bot instances endpoints - Additional routes below
 
     app.post('/api/bots', authenticateToken, async (req, res) => {
         try {
@@ -1208,7 +1321,7 @@ const start = async () => {
     })
 
     // Socket.IO connection - Railway-compatible
-    io.on('connection', (socket) => {
+    io.on('connection', async (socket) => {
         console.log('Client connected to WebSocket')
 
         // Send initial QR code if available
@@ -1223,8 +1336,29 @@ const start = async () => {
                 try {
                     // Try to generate a fresh QR code image from the raw data
                     console.log('Socket.IO: Generating fresh QR code from raw data');
-                    const qrImage = imageSync(client.qrRaw);
-                    const qrCodeBase64 = qrImage.toString('base64');
+                    let qrImage, qrCodeBase64;
+
+                    // First try with qr-image
+                    try {
+                        qrImage = imageSync(client.qrRaw);
+                        qrCodeBase64 = qrImage.toString('base64');
+                        console.log('Socket.IO: Successfully generated QR code with qr-image');
+                    } catch (qrImageError) {
+                        console.error('Socket.IO: Error generating QR with qr-image:', qrImageError);
+
+                        // Fallback to qrcode library
+                        const qrBuffer = await (async () => {
+                            return new Promise((resolve, reject) => {
+                                QRCode.toBuffer(client.qrRaw, (err, buffer) => {
+                                    if (err) reject(err);
+                                    else resolve(buffer);
+                                });
+                            });
+                        })();
+                        qrImage = qrBuffer;
+                        qrCodeBase64 = qrBuffer.toString('base64');
+                        console.log('Socket.IO: Successfully generated QR code with qrcode library');
+                    }
 
                     // Store the newly generated image for future use
                     client.QR = qrImage;
@@ -1381,7 +1515,7 @@ const start = async () => {
 // Start the bot without MongoDB
 start().then(client => {
     // Update QR code via Socket.IO when it changes
-    client.ev.on('connection.update', (update) => {
+    client.ev.on('connection.update', async (update) => {
         console.log('Connection update:', update);
 
         if (update.qr) {
@@ -1393,18 +1527,39 @@ start().then(client => {
             const expiresAt = client.qrTimestamp + 60000; // 60 seconds from generation
             const timeLeft = 60; // Start with 60 seconds
 
-            // For Railway deployment, log the QR data directly
-            if (process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN) {
-                console.log('📱 RAILWAY DEPLOYMENT - QR CODE DATA:');
-                console.log(update.qr);
-                console.log('📱 Copy this data to a QR code generator if needed');
-            }
+            // ALWAYS print the raw QR data in a format that's easy to copy
+            console.log('\n\n==============================================================')
+            console.log('🔴 IMPORTANT: COPY THIS QR CODE DATA TO USE WITH ONLINE QR GENERATOR 🔴')
+            console.log('==============================================================')
+            console.log(update.qr)
+            console.log('==============================================================')
+            console.log('Go to https://www.the-qrcode-generator.com/ and paste this data to generate a scannable QR code')
+            console.log('==============================================================\n\n')
 
             try {
                 // Try to generate a fresh QR code image from the raw data
                 console.log('Connection update: Generating fresh QR code from raw data');
-                const qrImage = imageSync(update.qr);
-                const qrCodeBase64 = qrImage.toString('base64');
+                let qrImage, qrCodeBase64;
+
+                // First try with qr-image
+                try {
+                    qrImage = imageSync(update.qr);
+                    qrCodeBase64 = qrImage.toString('base64');
+                    console.log('Connection update: Successfully generated QR code with qr-image');
+                } catch (qrImageError) {
+                    console.error('Connection update: Error generating QR with qr-image:', qrImageError);
+
+                    // Fallback to qrcode library
+                    try {
+                        const qrBuffer = await QRCode.toBuffer(update.qr);
+                        qrImage = qrBuffer;
+                        qrCodeBase64 = qrBuffer.toString('base64');
+                        console.log('Connection update: Successfully generated QR code with qrcode library');
+                    } catch (qrcodeError) {
+                        console.error('Connection update: Error generating QR with qrcode library:', qrcodeError);
+                        throw new Error('Failed to generate QR code with both libraries');
+                    }
+                }
 
                 // Store the newly generated image for future use
                 client.QR = qrImage;
@@ -1519,3 +1674,4 @@ start().then(client => {
 
 // Use http server instead of app.listen to support Socket.IO
 http.listen(port, () => console.log(`Server started on PORT: ${port}`))
+

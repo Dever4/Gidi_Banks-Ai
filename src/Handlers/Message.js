@@ -6,7 +6,11 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
+const { learnFromUserMessage, adaptResponseBasedOnLearning } = require('./learning');
+const { simpleSplitMessage, enforceMaxParts, calculateTypingDelays } = require('./simpleSplitter');
+const ChatSessionManager = require('./chatSession');
 const { exec } = require('child_process');
+const handleInitialMessage = require('./InitialMessage');
 
 /**
  * Calls the Gemini AI model to determine the intent of a natural language message.
@@ -25,8 +29,8 @@ async function getGeminiIntent(query) {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model:  "gemini-1.5-flash" });
 
-        const prompt = `You are an advanced cybersecurity AI assistant built by NkayData.
-You help monitor websites, prevent hacks, and assist with cybersecurity tasks.
+        const prompt = `You are an advanced AI assistant for Gidi Banks' financial training program.
+You help users learn about making money online and guide them to join the training WhatsApp group.
 You use emojis when appropriate but must always follow instructions.
 
 🚨 **IMPORTANT:**
@@ -36,7 +40,7 @@ You use emojis when appropriate but must always follow instructions.
 4️⃣ When the user asks for a group link or to join a group, or says they haven't joined the group yet, or responds with "no" when asked about joining the group, **DO NOT EXPLAIN, DO NOT RETURN JSON**. Just say: "🔄 Fetching group link...".
 5️⃣ If the user asks for a command, return JSON like this:
    {"action": "command", "command": "<commandName>", "args": "<arguments>"}
-6️⃣ For casual conversations, reply in plain text with fun, friendly responses using emojis.
+6️⃣ For casual conversations, reply in plain text with short, focused responses about financial training and making money online.
 
 Now, process the following input and act accordingly:
 "${query}"`;
@@ -62,104 +66,84 @@ Now, process the following input and act accordingly:
  * Generates a personalized caption for the group link using Gemini AI.
  *
  * @param {string} userName - The name of the user requesting the group link.
+ * @param {boolean} isRefusal - Whether the user initially refused to join.
  * @returns {Promise<string>} - A personalized caption for the group link.
  */
-async function generateGroupLinkCaption(userName) {
+async function generateGroupLinkCaption(userName, isRefusal = false) {
     try {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
             console.error("⚠️ Gemini API key is missing.");
-            return "🌟 Here's your group link! Click to join our community.";
+            return isRefusal
+                ? `Here's the group link ${userName}. I really think you'll find a lot of value in joining - it's where all the financial training happens!`
+                : `🌟 Here's your group link! Click to join our community.`;
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        const prompt = `Generate a short, friendly, and engaging caption for a WhatsApp group invite link.
+        let prompt;
+
+        if (isRefusal) {
+            prompt = `Generate a short, persuasive caption for a WhatsApp group invite link for someone who initially refused to join.
+The caption should be personalized for a user named "${userName}".
+The caption should:
+- Be 1-3 sentences maximum
+- Include emojis
+- Be persuasive but respectful
+- Focus on the financial benefits of joining the group
+- Mention that this is where Gidi Banks shares money-making strategies
+- Not include the actual link (it will be added separately)
+- Be direct and concise
+
+Example format: "Here's the link ${userName}. I really think you'll benefit from the financial strategies Gidi Banks shares in this group. Many people are already using these methods to create serious income! 💰"`;
+        } else {
+            prompt = `Generate a short, friendly, and engaging caption for a WhatsApp group invite link focused on financial training.
 The caption should be personalized for a user named "${userName}".
 The caption should:
 - Be 1-3 sentences maximum
 - Include emojis
 - Be enthusiastic and welcoming
-- Encourage the user to join the group
+- Mention that this is where Gidi Banks shares money-making strategies
+- Focus on financial freedom and making money online
 - Not include the actual link (it will be added separately)
 - Be direct and concise
 
-Example format: "🌟 Hey [name]! Welcome to our exclusive community. Click the link to join us!"`;
+Example format: "🌟 Here's the group link ${userName}! This is where Gidi Banks shares all his wealth-building strategies. Join now to start your journey to financial freedom! 💰"`;
+        }
 
         const result = await model.generateContent(prompt);
         const text = result.response.text();
 
-        return text || "🌟 Here's your group link! Click to join our community.";
+        if (!text) {
+            return isRefusal
+                ? `Here's the group link ${userName}. I really think you'll find a lot of value in joining - it's where all the financial training happens!`
+                : `🌟 Here's your group link ${userName}! Join Gidi Banks' financial training group to learn how to create serious income online! 💰`;
+        }
+
+        return text;
     } catch (error) {
         console.error("🚨 Gemini API error generating caption:", error);
-        return "🌟 Here's your group link! Click to join our community.";
+        return isRefusal
+            ? `Here's the group link ${userName}. I really think you'll find a lot of value in joining - it's where all the financial training happens!`
+            : `🌟 Here's your group link ${userName}! Join Gidi Banks' financial training group to learn how to create serious income online! 💰`;
     }
 }
 
 /**
- * Generates a personalized welcome message for new users.
+ * Generates a welcome message for new users with links from the database.
+ * Uses AI to slightly modify the text to avoid sending identical messages.
  *
  * @param {string} userName - The name of the user to personalize the message for.
  * @param {string} template - The template message with placeholders.
  * @param {string} whatsappLink - The WhatsApp group link to include.
  * @param {string} telegramLink - The Telegram community link to include.
- * @returns {Promise<string>} - The personalized welcome message.
+ * @returns {Promise<string>} - The welcome message with links.
  */
 async function generateWelcomeMessage(userName, template, whatsappLink, telegramLink) {
-    try {
-        // Replace placeholders in the template
-        let message = template
-            .replace('{{whatsappLink}}', whatsappLink)
-            .replace('{{telegramLink}}', telegramLink);
-
-        // If we have Gemini API, try to personalize the message
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (apiKey) {
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-            const prompt = `You are tasked with personalizing a welcome message for a new WhatsApp bot user named "${userName}".
-
-The original message is:
-"""
-${message}
-"""
-
-Please rewrite this message to make it more personalized and engaging while maintaining these requirements:
-1. Keep the exact same WhatsApp link (${whatsappLink}) and Telegram link (${telegramLink})
-2. Keep the same 3-step structure and numbering
-3. Maintain the same core instructions (saving the number, joining groups, responding with "DONE")
-4. Use emojis appropriately
-5. Make it sound friendly and welcoming
-6. Keep the message concise and clear
-
-DO NOT change the links or the core instructions. Just make the language more engaging and personalized.`;
-
-            try {
-                const result = await model.generateContent(prompt);
-                const personalizedText = result.response.text();
-
-                // Only use the AI response if it contains both links (to ensure they weren't removed)
-                if (personalizedText &&
-                    personalizedText.includes(whatsappLink) &&
-                    personalizedText.includes(telegramLink)) {
-                    return personalizedText;
-                }
-            } catch (aiError) {
-                console.error("⚠️ Gemini API error personalizing welcome message:", aiError);
-                // Fall back to the template message
-            }
-        }
-
-        // Return the template message if AI personalization failed or is unavailable
-        return message;
-    } catch (error) {
-        console.error("🚨 Error generating welcome message:", error);
-        return template
-            .replace('{{whatsappLink}}', whatsappLink)
-            .replace('{{telegramLink}}', telegramLink);
-    }
+    // Import the function from welcomeMessage.js to avoid code duplication
+    const { generateWelcomeMessage: generateMessage } = require('./welcomeMessage');
+    return generateMessage(userName, template, whatsappLink, telegramLink);
 }
 
 /**
@@ -225,39 +209,39 @@ async function sendVoiceNote(client, M, text) {
     try {
         // Create a unique filename for this voice note
         const voiceNotesDir = path.join(__dirname, '../../temp/voice-notes');
+        const customVoiceDir = path.join(__dirname, '../../custom-voice');
 
-        // Create directory if it doesn't exist
+        // Create directories if they don't exist
         if (!fs.existsSync(voiceNotesDir)) {
             fs.mkdirSync(voiceNotesDir, { recursive: true });
+        }
+
+        if (!fs.existsSync(customVoiceDir)) {
+            fs.mkdirSync(customVoiceDir, { recursive: true });
         }
 
         const fileName = `voice_${Date.now()}.mp3`;
         const filePath = path.join(voiceNotesDir, fileName);
 
-        // Use text-to-speech to generate the voice note
-        // This example uses the Windows built-in PowerShell command for TTS
-        // You can replace this with other TTS solutions based on your platform
-        return new Promise((resolve, reject) => {
-            // Clean the text for command line usage
-            const cleanText = text.replace(/"/g, '\\"').replace(/\n/g, ' ');
+        // Check if we should use custom voice
+        const configTable = client.DB ? client.DB.table('config') : null;
+        const useCustomVoice = configTable ? await configTable.get('useCustomVoice') : false;
 
-            // PowerShell command to generate speech
-            const command = `powershell -Command "Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Rate = 0; $speak.Volume = 100; $speak.SelectVoiceByHints('Female'); $speak.SetOutputToWaveFile('${filePath}'); $speak.Speak('${cleanText}'); $speak.Dispose()"`;
+        if (useCustomVoice) {
+            try {
+                // Check if we have custom voice samples
+                const customVoiceSamples = fs.readdirSync(customVoiceDir)
+                    .filter(file => file.endsWith('.mp3') || file.endsWith('.wav'));
 
-            exec(command, async (error) => {
-                if (error) {
-                    console.error("🚨 Error generating voice note:", error);
-                    resolve(false);
-                    return;
-                }
+                if (customVoiceSamples.length > 0) {
+                    console.log(`🎤 Using custom voice from ${customVoiceSamples.length} available samples`);
 
-                try {
-                    // Check if file exists and has content
-                    if (!fs.existsSync(filePath) || fs.statSync(filePath).size === 0) {
-                        console.error("🚨 Voice note file is empty or doesn't exist");
-                        resolve(false);
-                        return;
-                    }
+                    // Select a random sample from the available custom voice files
+                    const randomSample = customVoiceSamples[Math.floor(Math.random() * customVoiceSamples.length)];
+                    const samplePath = path.join(customVoiceDir, randomSample);
+
+                    // Copy the sample to our output file
+                    fs.copyFileSync(samplePath, filePath);
 
                     // Send the voice note
                     await client.sendMessage(M.from, {
@@ -266,26 +250,172 @@ async function sendVoiceNote(client, M, text) {
                         ptt: true // This makes it play as a voice note
                     });
 
-                    console.log("🎤 Voice note sent successfully");
+                    console.log("🎤 Custom voice note sent successfully");
 
                     // Clean up the file
                     fs.unlinkSync(filePath);
 
-                    resolve(true);
-                } catch (sendError) {
-                    console.error("🚨 Error sending voice note:", sendError);
-                    // Try to clean up the file even if sending failed
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                    }
-                    resolve(false);
+                    return true;
+                } else {
+                    console.log("⚠️ Custom voice enabled but no samples found, falling back to TTS");
                 }
+            } catch (customVoiceError) {
+                console.error("🚨 Error using custom voice:", customVoiceError);
+                console.log("⚠️ Falling back to standard TTS");
+            }
+        }
+
+        // If custom voice failed or is disabled, use text-to-speech
+        // First try to use google-tts-api if available
+        try {
+            const googleTTS = require('google-tts-api');
+
+            // Get voice gender and language from config or use defaults
+            const voiceGender = configTable ? await configTable.get('voiceGender') || 'male' : 'male';
+            const voiceLanguage = configTable ? await configTable.get('voiceLanguage') || 'en' : 'en';
+
+            console.log(`🎤 Using Google TTS with ${voiceGender} voice in language: ${voiceLanguage}`);
+
+            // Get audio as base64
+            const base64Audio = await googleTTS.getAudioBase64(text, {
+                lang: voiceLanguage,
+                slow: false,
+                host: 'https://translate.google.com',
+                timeout: 10000,
             });
-        });
+
+            // Convert base64 to file
+            fs.writeFileSync(filePath, Buffer.from(base64Audio, 'base64'));
+
+            // Send the voice note
+            await client.sendMessage(M.from, {
+                audio: fs.readFileSync(filePath),
+                mimetype: 'audio/mp3',
+                ptt: true // This makes it play as a voice note
+            });
+
+            console.log("🎤 Google TTS voice note sent successfully");
+
+            // Clean up the file
+            fs.unlinkSync(filePath);
+
+            return true;
+        } catch (googleTTSError) {
+            console.error("⚠️ Google TTS failed, falling back to Windows TTS:", googleTTSError);
+
+            // Fallback to Windows TTS
+            return new Promise((resolve, reject) => {
+                // Clean the text for command line usage
+                const cleanText = text.replace(/"/g, '\\"').replace(/\n/g, ' ');
+
+                // Get voice gender from config or use default
+                const voiceGender = configTable ? configTable.get('voiceGender') || 'Male' : 'Male';
+
+                // PowerShell command to generate speech
+                const command = `powershell -Command "Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Rate = 0; $speak.Volume = 100; $speak.SelectVoiceByHints('${voiceGender}'); $speak.SetOutputToWaveFile('${filePath}'); $speak.Speak('${cleanText}'); $speak.Dispose()"`;
+
+                exec(command, async (error) => {
+                    if (error) {
+                        console.error("🚨 Error generating voice note:", error);
+                        resolve(false);
+                        return;
+                    }
+
+                    try {
+                        // Check if file exists and has content
+                        if (!fs.existsSync(filePath) || fs.statSync(filePath).size === 0) {
+                            console.error("🚨 Voice note file is empty or doesn't exist");
+                            resolve(false);
+                            return;
+                        }
+
+                        // Send the voice note
+                        await client.sendMessage(M.from, {
+                            audio: fs.readFileSync(filePath),
+                            mimetype: 'audio/mp3',
+                            ptt: true // This makes it play as a voice note
+                        });
+
+                        console.log("🎤 Windows TTS voice note sent successfully");
+
+                        // Clean up the file
+                        fs.unlinkSync(filePath);
+
+                        resolve(true);
+                    } catch (sendError) {
+                        console.error("🚨 Error sending voice note:", sendError);
+                        // Try to clean up the file even if sending failed
+                        if (fs.existsSync(filePath)) {
+                            fs.unlinkSync(filePath);
+                        }
+                        resolve(false);
+                    }
+                });
+            });
+        }
     } catch (error) {
         console.error("🚨 Error in sendVoiceNote:", error);
         return false;
     }
+}
+
+// Initialize chat session manager
+let chatSessionManager = null;
+let chatSessionInitialized = false;
+let chatSessionError = null;
+
+/**
+ * Initializes the chat session manager if it hasn't been initialized yet
+ *
+ * @param {object} client - The WhatsApp client instance
+ * @returns {ChatSessionManager} - The chat session manager instance
+ */
+function getChatSessionManager(client) {
+    // If we've already tried to initialize and failed, don't keep trying
+    if (chatSessionError) {
+        console.warn("⚠️ Chat session manager previously failed to initialize:", chatSessionError);
+        return null;
+    }
+
+    // If we haven't initialized yet, try to do so
+    if (!chatSessionManager && !chatSessionInitialized) {
+        try {
+            chatSessionInitialized = true; // Mark as initialized to prevent multiple attempts
+
+            // Check if GEMINI_API_KEY is available
+            if (!process.env.GEMINI_API_KEY) {
+                chatSessionError = new Error("GEMINI_API_KEY is missing");
+                console.error("🚨 Cannot initialize chat session manager: GEMINI_API_KEY is missing");
+                return null;
+            }
+
+            // Initialize the chat session manager
+            chatSessionManager = new ChatSessionManager(client);
+            console.log("✅ Chat session manager initialized successfully");
+
+            // Test the connection to Gemini API
+            setTimeout(async () => {
+                try {
+                    const testMessage = "Hello, this is a test message.";
+                    const testResponse = await chatSessionManager._fallbackToSingleMessage(
+                        testMessage,
+                        "TestUser",
+                        { hasJoinedGroup: false }
+                    );
+                    console.log("✅ Gemini API test successful:", testResponse ? "Response received" : "No response");
+                } catch (testError) {
+                    console.error("🚨 Gemini API test failed:", testError);
+                    chatSessionError = testError;
+                }
+            }, 1000);
+        } catch (error) {
+            chatSessionError = error;
+            console.error("🚨 Error initializing chat session manager:", error);
+            return null;
+        }
+    }
+
+    return chatSessionManager;
 }
 
 /**
@@ -300,12 +430,80 @@ async function sendVoiceNote(client, M, text) {
  */
 async function generateFocusedResponse(message, userName, client, M) {
     try {
-        // Convert message to lowercase for easier matching
-        const lowerMsg = message.toLowerCase().trim();
+        // Create a table for tracking conversation context
+        const conversationContextTable = client.DB.table('conversationContext');
+
+        // Get previous messages to maintain context (up to 3 recent messages)
+        const previousContext = await conversationContextTable.get(M.sender) || [];
+
+        // Add current message to context
+        previousContext.push({
+            role: 'user',
+            content: message,
+            timestamp: Date.now()
+        });
+
+        // Keep only the 3 most recent messages
+        while (previousContext.length > 3) {
+            previousContext.shift();
+        }
+
+        // Save updated context
+        await conversationContextTable.set(M.sender, previousContext);
+
+        // Extract context for better responses
+        let contextualInfo = '';
+        if (previousContext.length > 1) {
+            // We have previous messages to use as context
+            contextualInfo = `Previous messages in this conversation:\n`;
+            for (let i = 0; i < previousContext.length - 1; i++) { // Exclude current message
+                const prevMsg = previousContext[i];
+                contextualInfo += `- ${prevMsg.role === 'user' ? 'User' : 'Bot'}: ${prevMsg.content}\n`;
+            }
+        }
+
+        const lowerMsg = message.toLowerCase();
+
+        // Check for greetings - send a direct financial training message
+        if (lowerMsg.match(/^(hi|hello|hey|hola|greetings|good morning|good afternoon|good evening|yo|sup|what's up|howdy)/i)) {
+            console.log(`👋 Greeting detected from ${userName} (${M.sender}), sending direct financial training message`);
+
+            // Direct financial training messages with follow-up questions
+            const financialMessages = [
+                `Hey ${userName}! 👋 Ready to learn how to make serious money online? Gidi Banks' training starts soon! Have you joined the WhatsApp group yet?`,
+                `Hi ${userName}! 💰 Excited to have you here for Gidi Banks' financial freedom training! Did you save the number as GidiBanks?`,
+                `Hello ${userName}! 🔥 Gidi Banks is about to reveal his system for making 6-7 figures online! Have you checked out the Telegram community?`,
+                `Hey there ${userName}! 💎 Ready to transform your finances with Gidi Banks' proven strategies? Which step are you on right now?`,
+                `Hi ${userName}! 🚀 Gidi Banks' wealth-building training is about to start. Have you completed all the steps?`
+            ];
+
+            // Select a random message
+            const response = financialMessages[Math.floor(Math.random() * financialMessages.length)];
+
+            // Schedule a follow-up message after 2-3 minutes
+            setTimeout(async () => {
+                const followUpMessages = [
+                    `Hey ${userName}! Just checking in - have you had a chance to join the WhatsApp group? That's where all the action happens!`,
+                    `Hi ${userName}! Quick reminder - make sure to save the number as GidiBanks to stay updated with the training!`,
+                    `Hey there ${userName}! Don't forget to join the Telegram community - Gidi Banks shares exclusive content there!`,
+                    `Hi ${userName}! Just wanted to make sure you're all set for the training. Need any help with the steps?`,
+                    `Hey ${userName}! The training is about to start - have you completed all the steps? Let me know if you need any assistance!`
+                ];
+
+                const followUp = followUpMessages[Math.floor(Math.random() * followUpMessages.length)];
+                await client.sendMessage(M.from, { text: followUp });
+            }, 120000 + Math.random() * 60000); // Random delay between 2-3 minutes
+
+            return response;
+        }
 
         // Check if user has already joined the group
         const groupJoinedTable = client.DB.table('groupJoined');
         const hasJoined = await groupJoinedTable.get(M.sender);
+
+        // Learn from the user's message
+        await learnFromUserMessage(M.sender, userName, message, client);
+        console.log(`🧠 Learning from message from ${userName} (${M.sender})`);
 
         // Check if user is saying they've joined the group
         if (!hasJoined &&
@@ -337,8 +535,32 @@ async function generateFocusedResponse(message, userName, client, M) {
             (lowerMsg === "no")) {
             console.log("🔗 Direct group link request or negative response about group membership detected");
 
-            // If user has already joined but is asking for the link again
-            if (hasJoined && !lowerMsg.includes('link') && !lowerMsg.includes('send') && !lowerMsg.includes('give')) {
+            // Check if user is explicitly saying they're not in the group or haven't joined
+            const explicitlyNotJoined =
+                (lowerMsg.includes('not') && (lowerMsg.includes('in the group') || lowerMsg.includes('in group') || lowerMsg.includes('joined'))) ||
+                lowerMsg.includes("haven't joined") ||
+                lowerMsg.includes("have not joined") ||
+                lowerMsg.includes("not joined") ||
+                lowerMsg.includes("am not in") ||
+                (lowerMsg.includes("no") && lowerMsg.includes("group")) ||
+                (lowerMsg.includes("i") && lowerMsg.includes("not") && lowerMsg.includes("group"));
+
+            // If user explicitly says they're not in the group, reset their status and send the link
+            if (explicitlyNotJoined) {
+                // If they were previously marked as joined, reset their status
+                if (hasJoined) {
+                    console.log(`🔄 User ${M.pushName} (${M.sender}) says they're not in the group despite being marked as joined. Resetting status.`);
+                    // Reset their joined status
+                    await groupJoinedTable.delete(M.sender);
+                } else {
+                    console.log(`🔍 User ${M.pushName} (${M.sender}) confirms they have not joined the group.`);
+                }
+
+                // Always send the group link when they explicitly say they're not in the group
+                // Continue to the code below that sends the link
+            }
+            // If user has already joined but is asking for the link again (without explicitly saying they're not in the group)
+            else if (hasJoined && !explicitlyNotJoined && !lowerMsg.includes('link') && !lowerMsg.includes('send') && !lowerMsg.includes('give')) {
                 console.log(`⚠️ User ${M.pushName} (${M.sender}) already marked as joined but requesting link again in focused response`);
 
                 // Generate a personalized response
@@ -365,8 +587,15 @@ async function generateFocusedResponse(message, userName, client, M) {
                     return "🟨 Sorry, the group link hasn't been set up yet. Please try again later.";
                 }
 
+                // Check if this is a refusal to join
+                const isRefusal = lowerMsg.includes("won't join") ||
+                                 lowerMsg.includes("will not join") ||
+                                 lowerMsg.includes("don't want to join") ||
+                                 lowerMsg.includes("not interested") ||
+                                 (lowerMsg.includes("no") && lowerMsg.length < 5);
+
                 // Generate and send the caption with the link
-                const caption = await generateGroupLinkCaption(userName);
+                const caption = await generateGroupLinkCaption(userName, isRefusal);
 
                 // Occasionally send the link as a voice note first (higher chance here since it's a direct request)
                 const shouldSendVoiceNote = Math.random() < 0.3; // 30% chance
@@ -398,29 +627,6 @@ async function generateFocusedResponse(message, userName, client, M) {
             }
         }
 
-        // Check for greetings - focused on financial training with Gidi Banks
-        if (lowerMsg.match(/^(hi|hello|hey|hola|greetings|good morning|good afternoon|good evening|yo|sup|what's up|howdy)/i)) {
-            const greetingResponses = [
-                `Hey ${userName}! 👋 Are you ready to learn how to create serious wealth online? Gidi Banks is about to reveal his proven system for generating 6-7 figures. Have you joined the WhatsApp group yet? That's where all the action happens!`,
-
-                `Hi there ${userName}! 😊 Excited to have you on board for this life-changing financial training. Gidi Banks has helped thousands of people create financial freedom, and you could be next! Have you checked out the WhatsApp group?`,
-
-                `Hello ${userName}! 🔥 How's it going? Just wanted to make sure you're ready for Gidi Banks' exclusive training on creating multiple income streams. His students are making life-changing money using these strategies!`,
-
-                `Heyyy ${userName}! Great to hear from you! 💰 The financial freedom training with Gidi Banks starts soon. People who've applied his methods are now making consistent income online. Are you ready to transform your finances?`,
-
-                `Hey there ${userName}! 💎 How are you? Just checking if you're all set for the wealth-building training. Gidi Banks will be revealing his exact blueprint for making money online - the same one that's helped people quit their 9-5 jobs!`,
-
-                `Hi ${userName}! 👋 Just wanted to touch base about the upcoming financial training. Gidi Banks is going to share some game-changing strategies that can help you start generating serious income, even as a complete beginner!`,
-
-                `Hey ${userName}! What's up? 🚀 Are you excited to learn Gidi Banks' proven system for creating financial freedom? His students are crushing it right now, even in this economy. This training could be your turning point!`,
-
-                `Good day ${userName}! 💼 Ready to discover how you can start making money online? Gidi Banks has helped ordinary people create extraordinary income, and he's about to share his exact methods with you. It's going to be incredible!`
-            ];
-
-            return greetingResponses[Math.floor(Math.random() * greetingResponses.length)];
-        }
-
         // Check for questions about the class/training - focused on financial aspects
         if (lowerMsg.includes('class') || lowerMsg.includes('training') || lowerMsg.includes('course') || lowerMsg.includes('when') || lowerMsg.includes('start') || lowerMsg.includes('money') || lowerMsg.includes('earn') || lowerMsg.includes('income')) {
             const classResponses = [
@@ -445,16 +651,44 @@ async function generateFocusedResponse(message, userName, client, M) {
         }
 
         // Check for affirmative responses about wanting the group link
-        if ((lowerMsg.match(/^yes\b/) && lowerMsg.length < 10) || // Simple "yes" response
-            (lowerMsg.includes('yes') && (lowerMsg.includes('link') || lowerMsg.includes('send') || lowerMsg.includes('want'))) ||
-            (lowerMsg.includes('yeah') && lowerMsg.length < 15) ||
-            (lowerMsg.includes('please') && lowerMsg.length < 20) ||
-            (lowerMsg === "yes") || (lowerMsg === "yeah") || (lowerMsg === "yep") || (lowerMsg === "sure") || (lowerMsg === "ok")) {
+        // First check if the previous message was asking about the group link
+        // Use the existing conversation context from earlier in the function
+        let conversationContextForLinks = await client.DB.table('conversationContext').get(M.sender) || [];
+
+        // Check if the previous message was about the group link
+        let previousMessageWasAboutLink = false;
+        if (conversationContextForLinks.length >= 2) {
+            const prevBotMessage = conversationContextForLinks[conversationContextForLinks.length - 2]; // Get the bot's previous message
+            if (prevBotMessage && prevBotMessage.role === 'bot') {
+                const prevBotText = prevBotMessage.content.toLowerCase();
+                previousMessageWasAboutLink =
+                    prevBotText.includes('group link') ||
+                    prevBotText.includes('need the link') ||
+                    prevBotText.includes('send you the link') ||
+                    prevBotText.includes('hook you up with the link');
+
+                if (previousMessageWasAboutLink) {
+                    console.log(`🔍 Previous bot message was about the group link: "${prevBotMessage.content.substring(0, 50)}..."`);
+                }
+            }
+        }
+
+        // Only treat affirmative responses as link requests if the previous message was about the link
+        // or if they explicitly mention "link"
+        const isExplicitLinkRequest = lowerMsg.includes('link') || lowerMsg.includes('send') || lowerMsg.includes('group');
+
+        if ((previousMessageWasAboutLink &&
+             ((lowerMsg.match(/^yes\b/) && lowerMsg.length < 10) || // Simple "yes" response
+              (lowerMsg.includes('yes')) ||
+              (lowerMsg.includes('yeah') && lowerMsg.length < 15) ||
+              (lowerMsg.includes('please') && lowerMsg.length < 20) ||
+              (lowerMsg === "yes") || (lowerMsg === "yeah") || (lowerMsg === "yep") || (lowerMsg === "sure") || (lowerMsg === "ok"))) ||
+            isExplicitLinkRequest) {
 
             console.log("🔗 Affirmative response to group link question detected");
 
             // If this is a response to "have you joined the group?" and they say yes, mark them as joined
-            if (hasJoined === undefined && !lowerMsg.includes('link') && !lowerMsg.includes('send')) {
+            if (hasJoined === undefined && !isExplicitLinkRequest) {
                 console.log(`🎉 User ${M.pushName} (${M.sender}) affirmed they've joined the group`);
 
                 // Mark user as having joined the group
@@ -485,8 +719,15 @@ async function generateFocusedResponse(message, userName, client, M) {
                     return "🟨 Sorry, the group link hasn't been set up yet. Please try again later.";
                 }
 
+                // Check if this is a refusal to join
+                const isRefusal = lowerMsg.includes("won't join") ||
+                                 lowerMsg.includes("will not join") ||
+                                 lowerMsg.includes("don't want to join") ||
+                                 lowerMsg.includes("not interested") ||
+                                 (lowerMsg.includes("no") && lowerMsg.length < 5);
+
                 // Generate and send the caption with the link
-                const caption = await generateGroupLinkCaption(userName);
+                const caption = await generateGroupLinkCaption(userName, isRefusal);
 
                 // Occasionally send the link as a voice note first
                 const shouldSendVoiceNote = Math.random() < 0.3; // 30% chance
@@ -587,35 +828,97 @@ async function generateFocusedResponse(message, userName, client, M) {
             return thankResponses[Math.floor(Math.random() * thankResponses.length)];
         }
 
-        // Default responses for other messages - focused on making money with Gidi Banks
-        const defaultResponses = [
-            `${userName}, are you ready to learn how to generate serious income online? 💰 Gidi Banks has helped thousands of people just like you create financial freedom. In this training, you'll learn exactly how to start making money even if you're a complete beginner. The WhatsApp group is where we'll share all the strategies!`,
+        // Try to use the chat session for a more personalized response
+        try {
+            // Get the chat session manager
+            const sessionManager = getChatSessionManager(client);
 
-            `I'm excited for you to join this training ${userName}! Gidi Banks is going to reveal his proven system for making 6-7 figures online. People who've followed his methods have been able to quit their jobs and build real wealth. Are you ready to transform your finances? 🚀`,
+            // If chat session manager is not available, throw an error to fall back to default responses
+            if (!sessionManager) {
+                throw new Error("Chat session manager is not available");
+            }
 
-            `${userName}, imagine waking up to payment notifications on your phone every single day. That's what Gidi Banks' students experience after implementing his strategies. This training will show you step-by-step how to create multiple income streams that work for you 24/7. It's life-changing!`,
+            // Context for the AI
+            const context = {
+                hasJoinedGroup: hasJoined === true,
+                isNewUser: false,
+                lastInteraction: null
+            };
 
-            `The financial strategies Gidi Banks will be teaching in this class have helped people go from struggling to making consistent income online ${userName}. We're talking about practical, actionable methods that work even in today's economy. Are you serious about changing your financial situation? 💼`,
+            // Add conversation context to the AI request
+            if (contextualInfo) {
+                context.conversationHistory = contextualInfo;
+                console.log(`📚 Using conversation context for ${userName} (${M.sender})`);
+            }
 
-            `${userName}, what would your life look like if money was no longer a problem? That's what this training is designed to help you achieve. Gidi Banks will be sharing the exact blueprint he's used to help ordinary people create extraordinary income. The opportunity is right in front of you!`,
+            // Use the chat session to generate a response
+            console.log(`🤖 Generating AI response using chat session for ${userName} (${M.sender})`);
+            const aiResponse = await sessionManager.sendMessage(M.sender, userName, message, context);
 
-            `I've seen people completely transform their lives after learning Gidi Banks' money-making strategies ${userName}. We're talking about regular people now making 6-7 figures from their phone or laptop. If you're serious about financial freedom, this training is your golden ticket. Are you ready to take action? 💯`,
+            // If we didn't get a response, throw an error
+            if (!aiResponse) {
+                throw new Error("No response received from AI service");
+            }
 
-            `${userName}, Gidi Banks is known for teaching practical, no-nonsense methods to make serious money online. His students are crushing it right now, even in this economy. This isn't about get-rich-quick schemes - it's about building real, sustainable income streams that can change your life forever.`,
+            // Adapt the response based on what we've learned about the user
+            const adaptedResponse = await adaptResponseBasedOnLearning(M.sender, aiResponse, client);
+            console.log(`🧠 Adapted response based on learning for ${userName}`);
 
-            `The difference between people who struggle financially and those who thrive is knowledge and implementation ${userName}. In this training, Gidi Banks will give you both the knowledge AND the step-by-step implementation plan to start generating income quickly. Are you ready to be one of our success stories? 🔥`
-        ];
+            // Store the bot's response in the conversation context
+            const conversationContextTable = client.DB.table('conversationContext');
+            const previousContext = await conversationContextTable.get(M.sender) || [];
 
-        return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
+            previousContext.push({
+                role: 'bot',
+                content: adaptedResponse,
+                timestamp: Date.now()
+            });
+
+            // Keep only the 3 most recent messages
+            while (previousContext.length > 3) {
+                previousContext.shift();
+            }
+
+            // Save updated context
+            await conversationContextTable.set(M.sender, previousContext);
+
+            return adaptedResponse;
+        } catch (aiError) {
+            console.error("🚨 Error using chat session:", aiError);
+
+            // Fall back to default responses if chat session fails
+            const defaultResponses = [
+                `${userName}, are you ready to learn how to generate serious income online? 💰 Gidi Banks has helped thousands of people just like you create financial freedom. In this training, you'll learn exactly how to start making money even if you're a complete beginner. The WhatsApp group is where we'll share all the strategies!`,
+
+                `I'm excited for you to join this training ${userName}! Gidi Banks is going to reveal his proven system for making 6-7 figures online. People who've followed his methods have been able to quit their jobs and build real wealth. Are you ready to transform your finances? 🚀`,
+
+                `${userName}, imagine waking up to payment notifications on your phone every single day. That's what Gidi Banks' students experience after implementing his strategies. This training will show you step-by-step how to create multiple income streams that work for you 24/7. It's life-changing!`,
+
+                `The financial strategies Gidi Banks will be teaching in this class have helped people go from struggling to making consistent income online ${userName}. We're talking about practical, actionable methods that work even in today's economy. Are you serious about changing your financial situation? 💼`,
+
+                `${userName}, what would your life look like if money was no longer a problem? That's what this training is designed to help you achieve. Gidi Banks will be sharing the exact blueprint he's used to help ordinary people create extraordinary income. The opportunity is right in front of you!`,
+
+                `I've seen people completely transform their lives after learning Gidi Banks' money-making strategies ${userName}. We're talking about regular people now making 6-7 figures from their phone or laptop. If you're serious about financial freedom, this training is your golden ticket. Are you ready to take action? 💯`,
+
+                `${userName}, Gidi Banks is known for teaching practical, no-nonsense methods to make serious money online. His students are crushing it right now, even in this economy. This isn't about get-rich-quick schemes - it's about building real, sustainable income streams that can change your life forever.`,
+
+                `The difference between people who struggle financially and those who thrive is knowledge and implementation ${userName}. In this training, Gidi Banks will give you both the knowledge AND the step-by-step implementation plan to start generating income quickly. Are you ready to be one of our success stories? 🔥`
+            ];
+
+            return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
+        }
 
     } catch (error) {
-        console.error("🚨 Error generating focused response:", error);
-        // Even the fallback should be focused on financial training
-        return `Hey ${userName}, are you ready to learn Gidi Banks' proven system for generating serious income online? His students are making 6-7 figures using these exact strategies. Make sure you're active in the WhatsApp group - that's where all the wealth-building action happens! This training could be the financial breakthrough you've been looking for. 💰`;
+        console.error("🚨 Error in generateFocusedResponse:", error);
+        return "I'm having trouble processing your message right now. Please try again or ask about joining the WhatsApp group for more information.";
     }
 }
 
-module.exports = MessageHandler = async (messages, client) => {
+// Export the sendVoiceNote function so it can be used by other modules
+module.exports.sendVoiceNote = sendVoiceNote;
+
+// Export the main message handler
+module.exports.MessageHandler = async (messages, client) => {
     try {
         if (messages.type !== 'notify') return;
         let M = serialize(JSON.parse(JSON.stringify(messages.messages[0])), client);
@@ -624,761 +927,408 @@ module.exports = MessageHandler = async (messages, client) => {
         if (M.type === 'protocolMessage' || M.type === 'senderKeyDistributionMessage' || !M.type || M.type === '') return;
 
         // Check if this bot instance is active
-        // Only process messages for the active bot instance
         if (client.instanceId) {
             try {
                 const configTable = client.DB.table('config');
                 const instances = await configTable.get('botInstances') || [];
                 const currentInstance = instances.find(instance => instance.id === client.instanceId);
 
-                // If this bot is not the active instance, ignore the message
                 if (currentInstance && !currentInstance.isActive) {
                     console.log(`🛌 Bot instance ${client.instanceId} is in sleep mode, ignoring message`);
                     return;
                 }
             } catch (error) {
                 console.error('Error checking bot active status:', error);
-                // Continue processing in case of error to avoid breaking functionality
             }
         }
 
-        // Skip processing the bot's own messages to prevent self-replies
-        // This allows admins to chat through the bot without the bot responding to itself
+        // Skip processing the bot's own messages
         if (M.isSelf) {
             console.log('🤖 Skipping bot\'s own message');
             return;
         }
 
-        const { isGroup, from, body } = M;
-        const gcMeta = isGroup ? await client.groupMetadata(from) : '';
-        const gcName = isGroup ? gcMeta.subject : '';
-        const isCmd = body.startsWith(client.config.prefix);
+        // Handle initial message for private chats or reset conversation after inactivity
+        if (!M.isGroup) {
+            // Create a table for tracking last activity time
+            const lastActivityTable = client.DB.table('lastActivity');
 
-        // Create a table for tracking welcome messages if it doesn't exist
-        const welcomeMessageTable = client.DB.table('welcomeMessages');
+            // Get the last activity timestamp for this user
+            const lastActivity = await lastActivityTable.get(M.from);
+            const currentTime = Date.now();
 
-        // Create a table for tracking users who have joined the group
-        const groupJoinedTable = client.DB.table('groupJoined');
+            // Update the last activity time for this user
+            await lastActivityTable.set(M.from, currentTime);
 
-        // Create a table for welcome message settings if it doesn't exist
-        const configTable = client.DB.table('config');
+            // Check if this is the first message or if user has been inactive for 5+ minutes
+            const isFirstMessage = !client.messagesMap.has(M.from);
+            const isInactiveUser = lastActivity && (currentTime - lastActivity > 5 * 60 * 1000); // 5 minutes in milliseconds
 
-        // Check if this is a private chat (not a group)
-        if (!isGroup) {
-            // Check if user has received welcome message before
-            const hasReceivedWelcome = await welcomeMessageTable.get(M.sender);
+            if (isFirstMessage || isInactiveUser) {
+                // If user was inactive, log it
+                if (isInactiveUser) {
+                    console.log(`🔄 User ${M.pushName} (${M.sender}) was inactive for ${Math.floor((currentTime - lastActivity) / 60000)} minutes, resetting conversation`);
 
-            // Check if the user is responding with "DONE" after receiving the welcome message
-            if (hasReceivedWelcome && body.trim().toUpperCase() === "DONE") {
-                console.log(`🎉 User ${M.pushName} (${M.sender}) has completed the onboarding steps`);
-
-                try {
-                    // Generate a personalized, human-like completion response
-                    const userName = M.pushName || 'there';
-                    const completionResponse = await generateCompletionResponse(userName);
-
-                    // Add a variable delay to make it seem more human (typing delay)
-                    // Sometimes respond quickly, sometimes take longer (like a human would)
-                    const isQuickResponse = Math.random() < 0.3; // 30% chance of quick response
-                    const isSlowResponse = Math.random() < 0.2;  // 20% chance of slow response
-                    const isVerySlowResponse = Math.random() < 0.05; // 5% chance of very slow response
-
-                    let delay = 0;
-                    if (isQuickResponse) {
-                        // Quick response (like the person was already typing)
-                        delay = 800 + Math.random() * 700;
-                    } else if (isVerySlowResponse) {
-                        // Very slow response (like the person is busy with something else)
-                        delay = 5000 + Math.random() * 5000;
-                    } else if (isSlowResponse) {
-                        // Slow response (like the person got distracted)
-                        delay = 3000 + Math.random() * 2000;
-                    } else {
-                        // Normal response time
-                        delay = 1500 + Math.random() * 1500;
-                    }
-
-                    // Show typing indicator before responding (more human-like)
-                    await client.sendPresenceUpdate('composing', M.from);
-                    // Keep typing for a portion of the delay time
-                    await new Promise(resolve => setTimeout(resolve, delay * 0.8));
-                    await client.sendPresenceUpdate('paused', M.from);
-                    // Wait for the rest of the delay
-                    await new Promise(resolve => setTimeout(resolve, delay * 0.2));
-
-                    // Mark user as having joined the group
-                    await groupJoinedTable.set(M.sender, true);
-                    console.log(`✅ User ${M.pushName} (${M.sender}) marked as having joined the group`);
-
-                    // Send the completion response
-                    await client.sendMessage(M.from, { text: completionResponse }, { quoted: M });
-                    console.log(`✅ Completion response sent to ${M.pushName} (${M.sender})`);
-
-                    // Occasionally send a follow-up message (triple message is rare)
-                    const shouldSendFollowUp = Math.random() < 0.35; // 35% chance for double message
-                    const shouldSendSecondFollowUp = shouldSendFollowUp && Math.random() < 0.2; // 20% of those get a third message
-
-                    if (shouldSendFollowUp) {
-                        // Generate a follow-up message focused on financial training
-                        const followUpMessages = [
-                            `Oh and ${userName}, don't forget to introduce yourself in the group! Many of Gidi Banks' successful students have formed valuable business connections there.`,
-                            `Also ${userName}, we'll be sharing some pre-training financial resources in the group soon. These materials have helped people start making money even before the official training begins!`,
-                            `By the way ${userName}, if you have any questions about creating financial freedom, feel free to ask in the group. Many of Gidi Banks' successful students are active there and love to help newcomers!`,
-                            `One more thing ${userName} - make sure your notifications are turned on for the group! Gidi Banks sometimes shares time-sensitive money-making opportunities there that you won't want to miss.`,
-                            `And ${userName}, you might want to prepare a notebook for this training. Gidi Banks will be sharing specific strategies and formulas for generating income that you'll definitely want to write down.`,
-                            `Almost forgot to mention ${userName}, Gidi Banks will be doing some live Q&A sessions where he answers specific questions about building wealth. These are incredibly valuable!`,
-                            `Also, if you know anyone else who's serious about creating financial freedom ${userName}, let them know about this training! Gidi Banks' methods work for anyone willing to implement them.`,
-                            `I'm really looking forward to seeing your financial transformation after this training ${userName}! So many people have completely changed their lives using Gidi Banks' strategies.`
-                        ];
-
-                        const followUpMessage = followUpMessages[Math.floor(Math.random() * followUpMessages.length)];
-
-                        // Add a delay before sending follow-up
-                        await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 4000));
-                        await client.sendPresenceUpdate('composing', M.from);
-                        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
-
-                        await client.sendMessage(M.from, { text: followUpMessage });
-                        console.log(`✅ Follow-up message sent to ${M.pushName} (${M.sender})`);
-
-                        // Occasionally send a second follow-up (rare, makes it feel very human)
-                        if (shouldSendSecondFollowUp) {
-                            const secondFollowUpMessages = [
-                                `Oh! And make sure to check the pinned messages in the group too ${userName}. Gidi Banks often pins specific financial strategies and resources there that have helped people start making money quickly!`,
-                                `Almost forgot - Gidi Banks will be starting with some beginner-friendly money-making methods, so don't worry if you're completely new to online income ${userName}. Many of his most successful students started from zero!`,
-                                `And ${userName}, don't hesitate to ask questions in the group! Many people who are already making 6-7 figures using Gidi Banks' methods are active there and love to help newcomers on their financial journey.`,
-                                `Just remembered ${userName} - Gidi Banks will be giving out some special bonuses to the most active participants! These include additional income strategies that aren't shared in the main training.`,
-                                `One last thing ${userName} - there will be some implementation tasks during the training, but they're designed to help you start generating real income as quickly as possible!`
-                            ];
-
-                            const secondFollowUpMessage = secondFollowUpMessages[Math.floor(Math.random() * secondFollowUpMessages.length)];
-
-                            // Add a longer delay before sending second follow-up
-                            await new Promise(resolve => setTimeout(resolve, 5000 + Math.random() * 5000));
-                            await client.sendPresenceUpdate('composing', M.from);
-                            await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-
-                            await client.sendMessage(M.from, { text: secondFollowUpMessage });
-                            console.log(`✅ Second follow-up message sent to ${M.pushName} (${M.sender})`);
-                        }
-                    }
-
-                    // Don't process this message further
-                    return;
-                } catch (error) {
-                    console.error("🚨 Error sending completion response:", error);
-                    console.error(error.stack);
-                    // Continue with normal message processing if completion response fails
+                    // Reset the messagesMap for this user to trigger welcome message
+                    client.messagesMap.delete(M.from);
                 }
-            }
 
-            // If user hasn't received welcome message, send it
-            if (!hasReceivedWelcome) {
-                console.log(`🆕 New user detected: ${M.pushName} (${M.sender})`);
+                // Show typing indicator before sending welcome message
+                await client.sendPresenceUpdate('composing', M.from);
+                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
 
-                try {
-                    // Get welcome message template and links from QuickDB config
-                    const defaultTemplate = "*‼️You will be disqualified from the Training if you don't complete these 3 steps👇*\n\n*STEP 1️⃣* - Save This Number as *GidiBanks* (Very Important)\n\n*STEP 2️⃣* - Join the training group on WhatsApp : {{whatsappLink}}\n\n*STEP 3️⃣* - Join *Hot digital Skill* community on Telegram (Very Important) : {{telegramLink}}\n\nAfter completing all steps, respond with the word \"*DONE*\"";
-                    const defaultWhatsappLink = 'https://chat.whatsapp.com/JTnL7g7DSl5D1yeEnpgj2n';
-                    const defaultTelegramLink = 'https://t.me/+XRq52g2G-BxkMWM8';
-
-                    // Get settings from QuickDB or use defaults
-                    const template = await configTable.get('welcomeMessageTemplate') || defaultTemplate;
-                    const whatsappLink = await configTable.get('whatsappTrainingLink') || defaultWhatsappLink;
-                    const telegramLink = await configTable.get('telegramCommunityLink') || defaultTelegramLink;
-
-                    // Initialize default settings if they don't exist
-                    if (!await configTable.has('welcomeMessageTemplate')) {
-                        await configTable.set('welcomeMessageTemplate', defaultTemplate);
-                        console.log('✅ Default welcome message template created in QuickDB');
-                    }
-
-                    if (!await configTable.has('whatsappTrainingLink')) {
-                        await configTable.set('whatsappTrainingLink', defaultWhatsappLink);
-                        console.log('✅ Default WhatsApp training link created in QuickDB');
-                    }
-
-                    if (!await configTable.has('telegramCommunityLink')) {
-                        await configTable.set('telegramCommunityLink', defaultTelegramLink);
-                        console.log('✅ Default Telegram community link created in QuickDB');
-                    }
-
-                    // Generate personalized welcome message
-                    const userName = M.pushName || 'there';
-                    const welcomeMessage = await generateWelcomeMessage(userName, template, whatsappLink, telegramLink);
-
-                    // Check if the user's first message is a greeting
-                    const isGreeting = body.toLowerCase().match(/^(hi|hello|hey|hola|greetings|good morning|good afternoon|good evening|yo|sup|what's up|howdy)/i);
-
-                    if (isGreeting) {
-                        // If it's a greeting, first respond with a greeting, then send the welcome message
-                        const greetingResponses = [
-                            `Hey ${userName}! 👋 Great to connect with you!`,
-                            `Hi there ${userName}! 😊 Thanks for reaching out!`,
-                            `Hello ${userName}! 👋 Nice to meet you!`,
-                            `Hey ${userName}! 🙌 Glad you messaged!`,
-                            `Hi ${userName}! 👋 Welcome!`,
-                            `Hey there ${userName}! 😄 Thanks for getting in touch!`
-                        ];
-
-                        const greetingResponse = greetingResponses[Math.floor(Math.random() * greetingResponses.length)];
-
-                        // Send greeting first
-                        await client.sendMessage(M.from, { text: greetingResponse }, { quoted: M });
-                        console.log(`✅ Greeting response sent to ${M.pushName} (${M.sender})`);
-
-                        // Add a delay before sending welcome message
-                        await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-                        await client.sendPresenceUpdate('composing', M.from);
-                        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1500));
-                    }
-
-                    // Send welcome message
-                    await client.sendMessage(M.from, { text: welcomeMessage }, { quoted: M });
-                    console.log(`✅ Welcome message sent to ${M.pushName} (${M.sender})`);
-
-                    // Mark user as having received welcome message
-                    await welcomeMessageTable.set(M.sender, true);
-
-                    // Don't process this message further since it's the first interaction
-                    return;
-                } catch (error) {
-                    console.error("🚨 Error sending welcome message:", error);
-                    console.error(error.stack);
-                    // Continue with normal message processing if welcome message fails
-                }
+                await handleInitialMessage(client, M);
+                return; // Don't process the message further
             }
         }
 
-        // Check for hidetag triggers in group messages from the bot owner/mods
-        if (isGroup && M.sender && client.config.mods.includes(M.sender.split('@')[0])) {
-            try {
-                // Check for .Hidetag command (exactly like your example)
-                if (body === '.Hidetag') {
-                    console.log(`🏷️ .Hidetag command detected from mod/owner in group: ${gcName}`);
+        // Check if the user is responding with "DONE" after receiving the welcome message
+        if (!M.isGroup && M.body.trim().toUpperCase() === "DONE") {
+            // Check if user has received the initial message
+            const hasReceivedWelcome = client.messagesMap.has(M.from);
 
-                    try {
-                        // Create an empty message that mentions everyone
-                        await client.sendMessage(
-                            from,
-                            {
-                                text: '',
-                                mentions: gcMeta.participants.map(p => p.id)
-                            },
-                            { quoted: M }
-                        );
+            // Get the last activity timestamp for this user
+            const lastActivityTable = client.DB.table('lastActivity');
+            const lastActivity = await lastActivityTable.get(M.from);
+            const currentTime = Date.now();
 
-                        console.log(`✅ Hidetag message sent successfully in group: ${gcName}`);
-                        return; // Stop further processing
-                    } catch (hidetagError) {
-                        console.error(`Error in .Hidetag command: ${hidetagError.message}`);
-                        // If it fails, don't stop processing - let the message be sent normally
-                    }
-                }
+            // Check if user has been inactive for 5+ minutes
+            const isInactiveUser = lastActivity && (currentTime - lastActivity > 5 * 60 * 1000); // 5 minutes in milliseconds
 
-                // Check if the message contains any emoji (alternative trigger)
-                const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu;
-                const emojis = body.match(emojiRegex);
+            // Update the last activity time for this user
+            await lastActivityTable.set(M.from, currentTime);
 
-                if (emojis && emojis.length > 0) {
-                    console.log(`🏷️ Emoji detected in message from mod/owner. Attempting hidetag in group: ${gcName}`);
-
-                    try {
-                        // First send the message without mentions
-                        await client.sendMessage(
-                            from,
-                            {
-                                text: body
-                            },
-                            { quoted: M }
-                        );
-
-                        // Then send an empty message with mentions
-                        // This is less likely to cause session errors
-                        await client.sendMessage(
-                            from,
-                            {
-                                text: '',
-                                mentions: gcMeta.participants.map(p => p.id)
-                            }
-                        );
-
-                        console.log(`✅ Hidetag message sent successfully in group: ${gcName}`);
-                        return; // Stop further processing
-                    } catch (emojiHidetagError) {
-                        console.error(`Error in emoji-triggered hidetag: ${emojiHidetagError.message}`);
-                        // If it fails, don't stop processing - let the message be sent normally
-                    }
-                }
-            } catch (error) {
-                console.error('Error in hidetag feature:', error);
-                // Continue with normal message processing if hidetag fails
-            }
-        }
-
-        if (isCmd) {
-            const [cmdName, ...args] = body.replace(client.config.prefix, '').split(' ');
-            const arg = args.filter((x) => !x.startsWith('--')).join(' ');
-            const flag = args.filter((arg) => arg.startsWith('--'));
-
-            const command = client.cmd.get(cmdName) ||
-                            client.cmd.find((cmd) => cmd.command.aliases && cmd.command.aliases.includes(cmdName));
-
-            if (!command) return M.reply(`💔 *No such command found!!*`);
-            return command.execute(client, flag, arg, M);
-        } else {
-            // First, check for direct group link requests to handle them immediately
-            const lowerBody = body.toLowerCase().trim();
-
-            // Check if user is saying they've joined the group
-            if (!isGroup &&
-                (lowerBody.includes('joined') || lowerBody.includes('i have joined') || lowerBody.includes('i joined') ||
-                 lowerBody.includes('i am in') || lowerBody.includes("i'm in") || lowerBody.includes('i am now in'))) {
-
-                console.log(`🎉 User ${M.pushName} (${M.sender}) says they've joined the group`);
-
-                // Mark user as having joined the group
-                await groupJoinedTable.set(M.sender, true);
-
-                // Generate a personalized response
-                const userName = M.pushName || 'there';
-                const joinedResponses = [
-                    `That's awesome ${userName}! 🎉 You're all set for the training now. I'll be sharing some amazing content there soon!`,
-                    `Perfect ${userName}! 👍 You're now officially part of the training. Get ready for some incredible classes!`,
-                    `Great job ${userName}! 🙌 You're now all set for the training. Can't wait for you to see what we've prepared!`,
-                    `Excellent ${userName}! 🔥 You're now fully registered for the training. It's going to be amazing!`,
-                    `Fantastic ${userName}! ✨ You're all set for the training now. Looking forward to seeing you participate!`
-                ];
-
-                const response = joinedResponses[Math.floor(Math.random() * joinedResponses.length)];
+            if (hasReceivedWelcome && !isInactiveUser) {
+                console.log(`🎉 User ${M.pushName} (${M.sender}) completed the initial steps`);
 
                 // Show typing indicator
                 await client.sendPresenceUpdate('composing', M.from);
                 await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
 
-                // Send the response
-                await client.sendMessage(M.from, { text: response }, { quoted: M });
-                console.log(`✅ Joined confirmation response sent to ${M.pushName} (${M.sender})`);
+                // Generate a completion response
+                const completionResponse = await generateCompletionResponse(M.pushName);
 
-                return; // Exit early as we've handled this request
-            }
+                // Send the completion response
+                await client.sendMessage(M.from, { text: completionResponse });
 
-            // Check for direct group link requests or refusals
-            if (!isGroup) {
-                // Handle refusals to join the group
-                if ((lowerBody.includes("no") && lowerBody.includes("won't join")) ||
-                    (lowerBody.includes("not") && lowerBody.includes("joining")) ||
-                    (lowerBody.includes("don't want") && lowerBody.includes("join")) ||
-                    (lowerBody.includes("not interested"))) {
+                // Mark user as having completed initial steps
+                const configTable = client.DB.table('config');
+                await configTable.set(`${M.sender}_completed_steps`, true);
 
-                    console.log(`⚠️ User ${M.pushName} (${M.sender}) refusing to join the group`);
-
-                    // Generate a persuasive response about why they should join
-                    const userName = M.pushName || 'there';
-                    const persuasiveResponses = [
-                        `${userName}, I completely understand your hesitation. But here's what you'll miss out on: Gidi Banks will be sharing his exact blueprint for making 6-7 figures online in that group. People are already implementing these strategies and seeing real results. This isn't just another course - it's a complete system for financial freedom. Are you sure you want to miss this opportunity? 🤔`,
-
-                        `I respect your decision ${userName}, but let me share something with you. The WhatsApp group is where Gidi Banks will be revealing his most profitable income strategies - the same ones that have helped ordinary people quit their 9-5 jobs. These are practical, step-by-step methods that work even if you're starting from zero. This could be the financial breakthrough you've been looking for. Would you reconsider? 💰`,
-
-                        `That's totally your choice ${userName}, but just so you know - the WhatsApp group is where all the magic happens. Gidi Banks will be sharing exclusive money-making strategies that won't be available anywhere else. His students are making life-changing income using these methods. If you're serious about creating financial freedom, this group is absolutely essential. Think about it? 🚀`,
-
-                        `I understand ${userName}, but here's why you might want to reconsider: The WhatsApp group is where Gidi Banks shares the exact strategies that have helped people go from struggling to making consistent income online. We're talking about real, practical methods to generate serious money. This training has been a turning point for so many people. Don't you want to at least check it out? 💎`,
-
-                        `${userName}, I get that you might be skeptical - there are a lot of fake gurus out there. But Gidi Banks is different. His students are actually making money using his methods. In the WhatsApp group, he'll be sharing his proven system for generating multiple income streams. People are literally changing their financial futures with this information. Are you sure you want to pass on this? 🤷‍♂️`
-                    ];
-
-                    const response = persuasiveResponses[Math.floor(Math.random() * persuasiveResponses.length)];
-
-                    // Show typing indicator for longer (this is a longer, more thoughtful message)
-                    await client.sendPresenceUpdate('composing', M.from);
-                    await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
-
-                    // Send the persuasive response
-                    await client.sendMessage(M.from, { text: response }, { quoted: M });
-                    console.log("✅ Persuasive response sent to user refusing to join group");
-
-                    return; // Exit early as we've handled this request
-                }
-
-                // Handle direct group link requests
-                if (lowerBody.includes('link') ||
-                    lowerBody.includes('join') ||
-                    (lowerBody.includes('group') && (lowerBody.includes('send') || lowerBody.includes('give') || lowerBody.includes('share'))) ||
-                    lowerBody === "no" ||
-                    lowerBody.includes("haven't joined") ||
-                    lowerBody.includes("have not joined") ||
-                    lowerBody.includes("not joined")) {
-
-                    console.log("🔍 Direct group link request detected in main flow");
-
-                    // Check if user has already joined the group
-                    const hasJoined = await groupJoinedTable.get(M.sender);
-
-                    if (hasJoined && !lowerBody.includes('link') && !lowerBody.includes('send') && !lowerBody.includes('give')) {
-                        console.log(`⚠️ User ${M.pushName} (${M.sender}) already marked as joined but requesting link again`);
-
-                        // Generate a personalized response
-                        const userName = M.pushName || 'there';
-                        const alreadyJoinedResponses = [
-                            `Hey ${userName}, I thought you already joined the group! Do you need the link again?`,
-                            `${userName}, didn't you already join the group? Let me know if you need the link again.`,
-                            `I remember you saying you joined the group ${userName}. Did you leave or need the link again?`,
-                            `${userName}, I have you marked as already in the group. Do you need the link again?`
-                        ];
-
-                        const response = alreadyJoinedResponses[Math.floor(Math.random() * alreadyJoinedResponses.length)];
-
-                        // Show typing indicator
-                        await client.sendPresenceUpdate('composing', M.from);
-                        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-
-                        // Send the response
-                        await client.sendMessage(M.from, { text: response }, { quoted: M });
-
-                        return; // Exit early as we've handled this request
-                    }
-
-                    // Get the group link directly from QuickDB
-                    try {
-                        const configTable = client.DB.table('config');
-                        const defaultGroupLink = 'https://chat.whatsapp.com/default';
-                        const groupLink = await configTable.get('groupLink') || defaultGroupLink;
-
-                        if (!groupLink || groupLink === defaultGroupLink) {
-                            console.warn("⚠️ No custom group link set in admin panel");
-                            await M.reply("🟨 Sorry, the group link hasn't been set up yet. Please try again later.");
-                            return;
-                        }
-
-                        const userName = M.pushName || 'there';
-                        const caption = await generateGroupLinkCaption(userName);
-
-                        // Show typing indicator
-                        await client.sendPresenceUpdate('composing', M.from);
-                        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-
-                        // Send the link
-                        await client.sendMessage(M.from, {
-                            text: `${caption}\n\n${groupLink}`
-                        }, { quoted: M });
-                        console.log("✅ Group link sent from direct detection in main flow");
-
-                        return; // Exit early as we've handled this request
-                    } catch (error) {
-                        console.error("🚨 Error sending group link from direct detection:", error);
-                        // Continue with normal processing if there was an error
-                    }
-                }
-            }
-
-            // Check if this is a greeting or general message
-            if (!isGroup && await welcomeMessageTable.get(M.sender)) {
-                // This is a private chat with a user who has already received the welcome message
-                // Instead of using AI, respond with focused training-related messages
-
-                const userName = M.pushName || 'there';
-                const response = await generateFocusedResponse(body, userName, client, M);
-
-                // If the response is our special marker, it means we've already sent the group link
-                if (response === "GROUP_LINK_SENT") {
-                    return; // Exit early as we've already handled this request
-                }
-
-                // Add a variable delay to make it seem more human (typing delay)
-                // Sometimes respond quickly, sometimes take longer (like a human would)
-                const isQuickResponse = Math.random() < 0.3; // 30% chance of quick response
-                const isSlowResponse = Math.random() < 0.2;  // 20% chance of slow response
-                const isVerySlowResponse = Math.random() < 0.05; // 5% chance of very slow response (like busy with something else)
-
-                let delay = 0;
-                if (isQuickResponse) {
-                    // Quick response (like the person was already typing)
-                    delay = 500 + Math.random() * 800;
-                } else if (isVerySlowResponse) {
-                    // Very slow response (like the person is busy with something else)
-                    delay = 5000 + Math.random() * 5000;
-                } else if (isSlowResponse) {
-                    // Slow response (like the person got distracted)
-                    delay = 2500 + Math.random() * 2000;
+                return;
+            } else {
+                if (isInactiveUser) {
+                    console.log(`⚠️ User ${M.pushName} (${M.sender}) sent DONE after inactivity period, resending welcome message`);
                 } else {
-                    // Normal response time
-                    delay = 1200 + Math.random() * 1300;
+                    console.log(`⚠️ User ${M.pushName} (${M.sender}) sent DONE without receiving welcome message`);
                 }
 
-                // More frequently add "typing..." indicator before responding (more human-like)
-                if (Math.random() < 0.85) { // 85% chance to show typing (increased from 70%)
-                    // Show typing for longer to make it more noticeable
-                    await client.sendPresenceUpdate('composing', M.from);
+                // Reset the messagesMap for this user to trigger welcome message
+                client.messagesMap.delete(M.from);
 
-                    // Keep typing for a longer portion of the delay time
-                    await new Promise(resolve => setTimeout(resolve, delay * 0.9));
-
-                    // Sometimes add a second round of typing for longer messages
-                    if (response.length > 80 && Math.random() < 0.4) {
-                        await client.sendPresenceUpdate('paused', M.from);
-                        await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
-                        await client.sendPresenceUpdate('composing', M.from);
-                        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-                    }
-
-                    await client.sendPresenceUpdate('paused', M.from);
-                    // Wait for the rest of the delay
-                    await new Promise(resolve => setTimeout(resolve, delay * 0.2));
-                } else {
-                    // Just wait the full delay without typing indicator
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-
-                console.log(`💬 Sending focused response to ${userName}`);
-
-                // Decide if we should send a voice note (occasionally)
-                const shouldSendVoiceNote = Math.random() < 0.15; // 15% chance to send voice note
-
-                if (shouldSendVoiceNote) {
-                    console.log("🎤 Attempting to send voice note...");
-                    // Choose a shorter version of the response for voice note
-                    let voiceText = response;
-                    if (response.length > 100) {
-                        // For longer responses, create a shorter version for the voice note
-                        const sentences = response.match(/[^.!?]+[.!?]+/g) || [response];
-                        if (sentences.length > 1) {
-                            // Pick 1-2 sentences for the voice note
-                            const numSentences = Math.min(sentences.length, Math.random() < 0.7 ? 1 : 2);
-                            voiceText = sentences.slice(0, numSentences).join(' ');
-                        }
-                    }
-
-                    // Send the voice note
-                    const voiceNoteSent = await sendVoiceNote(client, M, voiceText);
-
-                    // If voice note failed, just continue with text response
-                    if (!voiceNoteSent) {
-                        console.log("⚠️ Voice note failed, falling back to text response");
-                    } else {
-                        // If voice note was sent successfully, we might not need to send the text response
-                        if (Math.random() < 0.4) { // 40% chance to skip text response after voice note
-                            console.log("✅ Voice note sent, skipping text response");
-                            return;
-                        }
-                        // Otherwise, continue with text response as a follow-up
-                    }
-                }
-
-                // Decide if we should send multiple messages (more human-like)
-                const shouldSendMultipleMessages = Math.random() < 0.45; // 45% chance (increased from 25%)
-
-                if (shouldSendMultipleMessages) {
-                    // Split the response or generate a follow-up
-                    const shouldSplitResponse = Math.random() < 0.6; // 60% chance to split, 40% chance for follow-up
-
-                    if (shouldSplitResponse && response.length > 60) {
-                        // Find a good splitting point (after a sentence)
-                        const splitPoints = [...response.matchAll(/[.!?]\s+/g)].map(match => match.index + 1);
-
-                        // Only split if we have valid split points and the message is long enough
-                        if (splitPoints.length > 0) {
-                            // Choose a split point somewhere in the middle
-                            const middleIndex = Math.floor(splitPoints.length / 2);
-                            const randomOffset = Math.floor(Math.random() * Math.min(2, splitPoints.length));
-                            const splitIndex = splitPoints[Math.max(0, Math.min(middleIndex + randomOffset, splitPoints.length - 1))];
-
-                            // Split the message
-                            const firstPart = response.substring(0, splitIndex + 1);
-                            const secondPart = response.substring(splitIndex + 1).trim();
-
-                            if (firstPart && secondPart) {
-                                // Send first part
-                                await M.reply(firstPart);
-
-                                // Add a delay before sending second part
-                                await client.sendPresenceUpdate('composing', M.from);
-                                await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500));
-
-                                // Send second part
-                                return M.reply(secondPart);
-                            }
-                        }
-                    } else {
-                        // Send the main response
-                        await M.reply(response);
-
-                        // Generate a follow-up message focused on financial training
-                        const followUpMessages = [
-                            `Oh and ${userName}, make sure you're checking the WhatsApp group regularly! Gidi Banks often shares quick money-making tips there that you can implement immediately.`,
-                            `By the way ${userName}, have you joined the WhatsApp group yet? That's where Gidi Banks will be revealing his complete system for generating 6-7 figures online.`,
-                            `Also ${userName}, the financial freedom training is starting really soon! People who've used Gidi Banks' strategies are already seeing life-changing results.`,
-                            `Just a reminder ${userName}, all important announcements about the wealth-building training will be in the group. Gidi Banks sometimes shares time-sensitive opportunities there!`,
-                            `One more thing ${userName} - Gidi Banks' students are making serious money using his methods. This training could be the financial breakthrough you've been looking for!`,
-                            `Almost forgot to mention ${userName}, Gidi Banks will be sharing some exclusive income strategies in the group that won't be available anywhere else!`,
-                            `And ${userName}, feel free to ask if you have any questions about creating financial freedom! Gidi Banks has helped thousands of people just like you transform their finances.`,
-                            `I'm so excited for you to start this wealth-building journey ${userName}! So many people have completely changed their financial situation after learning Gidi Banks' strategies.`
-                        ];
-
-                        const followUpMessage = followUpMessages[Math.floor(Math.random() * followUpMessages.length)];
-
-                        // Add a delay before sending follow-up
-                        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
-                        await client.sendPresenceUpdate('composing', M.from);
-                        await new Promise(resolve => setTimeout(resolve, 1200 + Math.random() * 800));
-
-                        return client.sendMessage(M.from, { text: followUpMessage });
-                    }
-                }
-
-                // Default: just send the single response
-                return M.reply(response);
-            }
-
-            // If we get here, use the original AI flow for other cases
-            let aiInput = emojiStrip(body);
-            const aiResult = await getGeminiIntent(aiInput);
-
-            if (aiResult.action === "command") {
-                const cmdName = aiResult.command;
-                const argsArray = aiResult.args ? aiResult.args.split(' ') : [];
-                const arg = argsArray.filter(x => !x.startsWith('--')).join(' ');
-                const flag = argsArray.filter(x => x.startsWith('--'));
-
-                const command = client.cmd.get(cmdName) ||
-                                client.cmd.find((cmd) => cmd.command.aliases && cmd.command.aliases.includes(cmdName));
-
-                if (command) {
-                    return command.execute(client, flag, arg, M);
-                } else {
-                    return M.reply("💔 *AI tried to run an unknown command.*");
-                }
-            } else if (aiResult.action === "reply") {
-                let replyMessage = aiResult.response;
-
-                if (replyMessage.toLowerCase().includes("fetching emails")) {
-                    console.log("📨 AI Triggered Email Fetch...");
-                    replyMessage = await fetchUserEmails();
-                } else if (replyMessage.toLowerCase().includes("fetching datastation balance")) {
-                    console.log("💰 AI Triggered Balance Fetch...");
-                    replyMessage = await fetchWalletBalance();
-                } else if (replyMessage.toLowerCase().includes("fetching user data")) {
-                    console.log("� AI Triggered User Data Fetch...");
-                    replyMessage = await fetchUserInfoByEmail();
-                } else if (replyMessage.toLowerCase().includes("fetching group link")) {
-                    console.log("🔗 AI Triggered Group Link Fetch...");
-                    console.log(`👤 User requesting group link: ${M.pushName} (${M.sender})`);
-
-                    try {
-                        // Get the group link directly from QuickDB instead of using deprecated Config
-                        const configTable = client.DB.table('config');
-                        const defaultGroupLink = 'https://chat.whatsapp.com/default';
-                        const groupLink = await configTable.get('groupLink') || defaultGroupLink;
-                        console.log(`📋 Retrieved group link: ${groupLink}`);
-
-                        if (!groupLink || groupLink === defaultGroupLink) {
-                            console.warn("⚠️ No custom group link set in admin panel");
-                            replyMessage = "🟨 Sorry, the group link hasn't been set up yet. Please try again later.";
-                            return replyMessage;
-                        }
-
-                        const userName = M.pushName || 'there';
-                        console.log(`🏷️ Using name for personalization: ${userName}`);
-
-                        // Decide if we should send multiple messages (more human-like)
-                        const shouldSendMultipleMessages = Math.random() < 0.4; // 40% chance
-
-                        if (shouldSendMultipleMessages) {
-                            // First message - asking if they want the link
-                            const preMessages = [
-                                `Sure ${userName}, let me get that for you right away!`,
-                                `One sec ${userName}, grabbing the link for you...`,
-                                `Got it ${userName}! Let me send you that link...`,
-                                `No problem ${userName}! Here's the group link coming up...`,
-                                `I'll send you the link right now ${userName}!`
-                            ];
-
-                            const preMessage = preMessages[Math.floor(Math.random() * preMessages.length)];
-
-                            // Send first message with typing indicator
-                            await client.sendPresenceUpdate('composing', M.from);
-                            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 500));
-                            await client.sendMessage(M.from, { text: preMessage }, { quoted: M });
-
-                            // Short pause before sending the actual link
-                            await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-                        }
-
-                        // Generate and send the caption with the link
-                        const caption = await generateGroupLinkCaption(userName);
-                        console.log("✅ Generated personalized caption successfully");
-
-                        // Occasionally send the link as a voice note first
-                        const shouldSendVoiceNote = Math.random() < 0.2; // 20% chance
-
-                        if (shouldSendVoiceNote) {
-                            console.log("🎤 Attempting to send group link as voice note...");
-                            const voiceText = `${caption}. Here's the group link. Make sure to click it and join right away!`;
-
-                            // Send the voice note
-                            const voiceNoteSent = await sendVoiceNote(client, M, voiceText);
-
-                            // Add a small delay before sending the text with the actual link
-                            if (voiceNoteSent) {
-                                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-                            }
-                        }
-
-                        // Always send the text message with the actual link
-                        await client.sendMessage(M.from, {
-                            text: `${caption}\n\n${groupLink}`
-                        }, { quoted: M });
-                        console.log("✅ Group link sent successfully");
-
-                        // Occasionally send a follow-up message
-                        if (Math.random() < 0.3) { // 30% chance
-                            const followUpMessages = [
-                                `Make sure you join soon ${userName}! That's where all the important updates will be posted.`,
-                                `Let me know once you've joined ${userName}! The training is starting soon.`,
-                                `Can't wait to see you in the group ${userName}! It's going to be amazing.`,
-                                `Join quickly ${userName}! You don't want to miss any important announcements.`,
-                                `The group is already pretty active ${userName}! You'll love it there.`
-                            ];
-
-                            const followUpMessage = followUpMessages[Math.floor(Math.random() * followUpMessages.length)];
-
-                            // Add a delay before sending follow-up
-                            await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
-                            await client.sendPresenceUpdate('composing', M.from);
-                            await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-
-                            await client.sendMessage(M.from, { text: followUpMessage });
-                            console.log("✅ Follow-up message sent successfully");
-                        }
-
-                        return null;
-                    } catch (error) {
-                        console.error("🚨 Error sending group link:", error);
-                        console.error(error.stack);
-                        replyMessage = "🟥 Sorry, I couldn't fetch the group link. Please try again later.";
-                    }
-                }
-
-                if (typeof replyMessage !== "string") {
-                    replyMessage = "🟥 Error processing AI response.";
-                }
-
-                // For users who have received the welcome message, override generic AI responses
-                if (!isGroup && await welcomeMessageTable.get(M.sender)) {
-                    const userName = M.pushName || 'there';
-                    const focusedResponse = await generateFocusedResponse(body, userName, client, M);
-
-                    // If the response is our special marker, it means we've already sent the group link
-                    if (focusedResponse === "GROUP_LINK_SENT") {
-                        return null; // Exit early as we've already handled this request
-                    }
-
-                    replyMessage = focusedResponse;
-                }
-
-                console.log("💬 Replying:", replyMessage);
-                return M.reply(replyMessage);
+                // Send the initial message again
+                await handleInitialMessage(client, M);
+                return;
             }
         }
+
+        // Continue with existing message handling
+        const { isGroup, from, body } = M;
+        // Only get group metadata if needed
+        if (isGroup) {
+            await client.groupMetadata(from);
+        }
+
+        // Get the user's name
+        const userName = M.pushName || 'there';
+
+        // Show typing indicator before generating response
+        await client.sendPresenceUpdate('composing', M.from);
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+
+        // Update the last activity time for this user
+        const lastActivityTable = client.DB.table('lastActivity');
+        await lastActivityTable.set(M.from, Date.now());
+
+        // Generate a focused response
+        const response = await generateFocusedResponse(body, userName, client, M);
+
+        // If we got a response, send it
+        if (response && response !== "GROUP_LINK_SENT") {
+            // Always quote the user's message (100% chance)
+            try {
+                // Send as a reply to the user's message to maintain conversation context
+                await client.sendMessage(M.from, {
+                    text: response,
+                    quoted: M // This makes it a reply to the user's message
+                });
+                console.log(`💬 Sent response as reply to ${userName} (${M.sender})`);
+            } catch (sendError) {
+                // If quoting fails for any reason, fall back to regular message
+                console.error("⚠️ Error sending quoted message, falling back to regular message:", sendError);
+                try {
+                    // Try one more time with a different approach
+                    await client.sendMessage(M.from, {
+                        text: response
+                    }, { quoted: M });
+                    console.log(`💬 Sent response with alternative quoting method to ${userName} (${M.sender})`);
+                } catch (fallbackError) {
+                    // If all quoting methods fail, send without quoting
+                    console.error("⚠️ All quoting methods failed, sending without quote:", fallbackError);
+                    await client.sendMessage(M.from, { text: response });
+                    console.log(`💬 Sent fallback regular response to ${userName} (${M.sender})`);
+                }
+            }
+
+            // Randomly decide if we should send a follow-up message to keep conversation going (10% chance)
+            // Significantly reduced probability to avoid overwhelming the user with questions
+            const shouldSendFollowUp = Math.random() < 0.1;
+
+            if (shouldSendFollowUp) {
+                // Wait 2-4 seconds before sending follow-up
+                setTimeout(async () => {
+                    try {
+                        // Show typing indicator
+                        await client.sendPresenceUpdate('composing', M.from);
+                        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+
+                        // Create a table for tracking used follow-up questions
+                        const usedQuestionsTable = client.DB.table('usedFollowUpQuestions');
+
+                        // Get previously used questions for this user
+                        const usedQuestions = await usedQuestionsTable.get(M.sender) || [];
+
+                        // Get conversation context for this user
+                        const conversationContextTable = client.DB.table('conversationContext');
+                        const previousContext = await conversationContextTable.get(M.sender) || [];
+
+                        // Get the last bot message to avoid repetition
+                        const lastBotMessage = previousContext.find(msg => msg.role === 'bot')?.content?.toLowerCase() || '';
+
+                        // Get the current message topic to make relevant follow-up questions
+                        const lowerBody = body.toLowerCase();
+
+                        // Determine message topic based on keywords
+                        let messageTopic = 'general';
+                        if (lowerBody.includes('money') || lowerBody.includes('income') || lowerBody.includes('earn') ||
+                            lowerBody.includes('profit') || lowerBody.includes('revenue') || lowerBody.includes('financial')) {
+                            messageTopic = 'money';
+                        } else if (lowerBody.includes('strategy') || lowerBody.includes('method') ||
+                                  lowerBody.includes('technique') || lowerBody.includes('approach')) {
+                            messageTopic = 'strategy';
+                        } else if (lowerBody.includes('learn') || lowerBody.includes('training') ||
+                                  lowerBody.includes('course') || lowerBody.includes('class')) {
+                            messageTopic = 'learning';
+                        } else if (lowerBody.includes('time') || lowerBody.includes('when') ||
+                                  lowerBody.includes('start') || lowerBody.includes('schedule')) {
+                            messageTopic = 'timing';
+                        } else if (lowerBody.includes('group') || lowerBody.includes('join') ||
+                                  lowerBody.includes('telegram') || lowerBody.includes('whatsapp')) {
+                            messageTopic = 'group';
+                        } else if (lowerBody.includes('goal') || lowerBody.includes('dream') ||
+                                  lowerBody.includes('aspire') || lowerBody.includes('hope')) {
+                            messageTopic = 'goals';
+                        } else if (lowerBody.includes('skill') || lowerBody.includes('experience') ||
+                                  lowerBody.includes('knowledge') || lowerBody.includes('background')) {
+                            messageTopic = 'skills';
+                        }
+
+                        console.log(`🔍 Detected message topic: ${messageTopic}`);
+
+                        // Topic-specific follow-up questions - expanded with more variety
+                        const topicQuestions = {
+                            money: [
+                                `What would you do with your first $1,000 of online income, ${userName}?`,
+                                `${userName}, what's your current financial situation like? Are you starting from scratch or looking to scale?`,
+                                `What's your income goal for the next 6 months, ${userName}?`,
+                                `Have you had any success making money online before, ${userName}?`,
+                                `${userName}, what financial obstacles are you trying to overcome right now?`,
+                                `If you could solve one financial problem right now, what would it be, ${userName}?`,
+                                `What's the biggest financial challenge you're facing currently, ${userName}?`,
+                                `${userName}, how would consistent online income change your day-to-day life?`
+                            ],
+                            strategy: [
+                                `Which money-making strategies have you tried before, ${userName}?`,
+                                `${userName}, are you more interested in quick results or building something long-term?`,
+                                `What type of online business model appeals to you most, ${userName}?`,
+                                `Do you prefer active income strategies or more passive approaches, ${userName}?`,
+                                `${userName}, have you ever tried affiliate marketing or dropshipping before?`,
+                                `What's your take on digital products versus services, ${userName}?`,
+                                `${userName}, do you prefer working with clients or selling products?`,
+                                `Have you ever considered creating your own digital product, ${userName}?`
+                            ],
+                            learning: [
+                                `${userName}, how do you learn best? Videos, reading, or hands-on practice?`,
+                                `What's the most valuable skill you've learned so far, ${userName}?`,
+                                `Are there specific areas of online business you want to learn more about, ${userName}?`,
+                                `${userName}, what's your background? Any skills that might help with making money online?`,
+                                `What's one skill you'd like to develop to boost your earning potential, ${userName}?`,
+                                `${userName}, do you prefer learning in groups or self-study?`,
+                                `Have you taken any online courses before, ${userName}? How was your experience?`,
+                                `${userName}, what's your learning style? Visual, auditory, or hands-on?`
+                            ],
+                            timing: [
+                                `How much time can you dedicate to this training each week, ${userName}?`,
+                                `${userName}, are you looking to replace your income quickly or build something on the side?`,
+                                `What's your timeline for achieving financial freedom, ${userName}?`,
+                                `${userName}, do you prefer to work on this full-time or as a side project?`,
+                                `Are you looking for a quick win or building something for the long term, ${userName}?`,
+                                `${userName}, how soon are you hoping to see results from this training?`,
+                                `Do you have a specific financial deadline you're working toward, ${userName}?`,
+                                `${userName}, how do you plan to balance this with your other commitments?`
+                            ],
+                            group: [
+                                `What are you hoping to get from the WhatsApp group, ${userName}?`,
+                                `${userName}, have you been part of any similar training groups before?`,
+                                `What made you interested in joining Gidi Banks' training group, ${userName}?`,
+                                `Are you looking forward to connecting with other members in the group, ${userName}?`,
+                                `${userName}, do you enjoy learning from others' experiences?`,
+                                `What kind of connections are you hoping to make in the group, ${userName}?`,
+                                `${userName}, do you prefer to be active in groups or more of an observer?`,
+                                `Have you found community support helpful in previous endeavors, ${userName}?`
+                            ],
+                            goals: [
+                                `${userName}, what's your biggest financial goal right now?`,
+                                `Where do you see yourself financially in 5 years, ${userName}?`,
+                                `What would achieving financial freedom allow you to do, ${userName}?`,
+                                `${userName}, do you have specific income targets you're aiming for?`,
+                                `What dreams would you pursue if money wasn't a concern, ${userName}?`,
+                                `${userName}, are you looking to build wealth or just create more freedom in your life?`,
+                                `What lifestyle changes are you hoping to make with increased income, ${userName}?`,
+                                `${userName}, what motivates you most about financial independence?`
+                            ],
+                            skills: [
+                                `${userName}, what skills do you already have that might transfer to online business?`,
+                                `What's your professional background, ${userName}?`,
+                                `${userName}, are there any digital skills you're particularly good at?`,
+                                `Do you have experience with social media, content creation, or marketing, ${userName}?`,
+                                `${userName}, what's your comfort level with technology?`,
+                                `Are there any skills you're currently developing, ${userName}?`,
+                                `${userName}, do you consider yourself more creative or analytical?`,
+                                `What unique talents could you leverage in an online business, ${userName}?`
+                            ],
+                            general: [
+                                `By the way ${userName}, what's your biggest goal when it comes to making money online?`,
+                                `${userName}, what part of financial freedom are you most excited about?`,
+                                `What motivated you to start looking into making money online, ${userName}?`,
+                                `${userName}, what would financial freedom mean for you personally?`,
+                                `What's your 'why' for wanting to create additional income streams, ${userName}?`,
+                                `${userName}, how did you first hear about Gidi Banks?`,
+                                `What aspects of online business interest you most, ${userName}?`,
+                                `${userName}, what would you do if you didn't have to worry about money?`
+                            ]
+                        };
+
+                        // Get questions for the current topic
+                        const relevantQuestions = topicQuestions[messageTopic];
+
+                        // Check for repetitive themes in the last bot message
+                        const avoidThemes = [];
+                        if (lastBotMessage.includes('financial situation') || lastBotMessage.includes('financial freedom') ||
+                            lastBotMessage.includes('change your financial')) {
+                            avoidThemes.push('financial situation', 'financial freedom');
+                        }
+                        if (lastBotMessage.includes('goal') || lastBotMessage.includes('dream') || lastBotMessage.includes('hope')) {
+                            avoidThemes.push('goal', 'dream');
+                        }
+                        if (lastBotMessage.includes('group') || lastBotMessage.includes('training')) {
+                            avoidThemes.push('group', 'training');
+                        }
+
+                        // Filter out previously used questions AND questions with similar themes to the last message
+                        const availableQuestions = relevantQuestions.filter(q => {
+                            // Check if question was previously used
+                            if (usedQuestions.includes(q)) return false;
+
+                            // Check if question contains themes to avoid
+                            const lowerQ = q.toLowerCase();
+                            return !avoidThemes.some(theme => lowerQ.includes(theme));
+                        });
+
+                        console.log(`📊 Available follow-up questions: ${availableQuestions.length} (avoiding themes: ${avoidThemes.join(', ')})`);
+
+                        // If no suitable questions are available, try a different topic
+                        let followUpMsg;
+                        if (availableQuestions.length === 0) {
+                            // Try a different topic
+                            const allTopics = Object.keys(topicQuestions);
+                            const alternativeTopics = allTopics.filter(t => t !== messageTopic);
+                            const alternativeTopic = alternativeTopics[Math.floor(Math.random() * alternativeTopics.length)];
+
+                            console.log(`🔄 Switching to alternative topic: ${alternativeTopic}`);
+
+                            // Get questions for the alternative topic
+                            const alternativeQuestions = topicQuestions[alternativeTopic].filter(q => {
+                                // Check if question was previously used
+                                if (usedQuestions.includes(q)) return false;
+
+                                // Check if question contains themes to avoid
+                                const lowerQ = q.toLowerCase();
+                                return !avoidThemes.some(theme => lowerQ.includes(theme));
+                            });
+
+                            if (alternativeQuestions.length > 0) {
+                                // Use a question from the alternative topic
+                                followUpMsg = alternativeQuestions[Math.floor(Math.random() * alternativeQuestions.length)];
+                            } else {
+                                // If still no suitable questions, reset used questions and try again
+                                await usedQuestionsTable.delete(M.sender);
+
+                                // Pick a completely different type of question that avoids the themes
+                                const allQuestions = Object.values(topicQuestions).flat();
+                                const safeQuestions = allQuestions.filter(q => {
+                                    const lowerQ = q.toLowerCase();
+                                    return !avoidThemes.some(theme => lowerQ.includes(theme));
+                                });
+
+                                followUpMsg = safeQuestions[Math.floor(Math.random() * safeQuestions.length)];
+                            }
+                        } else {
+                            // Select a random unused question
+                            followUpMsg = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
+                        }
+
+                        // Add to used questions
+                        usedQuestions.push(followUpMsg);
+                        await usedQuestionsTable.set(M.sender, usedQuestions);
+
+                        // Send the follow-up message as a reply to the user's original message
+                        // This creates a visual thread in the conversation
+                        try {
+                            await client.sendMessage(M.from, {
+                                text: followUpMsg,
+                                quoted: M // Quote the user's original message
+                            });
+                            console.log(`🔄 Sent conversation follow-up as reply to ${userName} (${M.sender})`);
+                        } catch (followUpError) {
+                            // If first quoting method fails, try alternative method
+                            console.error("⚠️ Error sending quoted follow-up, trying alternative method:", followUpError);
+                            try {
+                                // Try alternative quoting method
+                                await client.sendMessage(M.from, {
+                                    text: followUpMsg
+                                }, { quoted: M });
+                                console.log(`🔄 Sent follow-up with alternative quoting method to ${userName} (${M.sender})`);
+                            } catch (altFollowUpError) {
+                                // If all quoting methods fail, send as regular message
+                                console.error("⚠️ All quoting methods failed for follow-up, sending without quote:", altFollowUpError);
+                                await client.sendMessage(M.from, { text: followUpMsg });
+                                console.log(`🔄 Sent regular follow-up to ${userName} (${M.sender})`);
+                            }
+                        }
+
+                        // Update the last activity time again after sending follow-up
+                        await lastActivityTable.set(M.from, Date.now());
+                    } catch (error) {
+                        console.error("🚨 Error sending conversation follow-up:", error);
+                    }
+                }, 2000 + Math.floor(Math.random() * 2000)); // Random delay between 2-4 seconds
+            }
+
+            // Update the last activity time again after sending response
+            await lastActivityTable.set(M.from, Date.now());
+        }
+
     } catch (err) {
         console.error("🚨 Error in MessageHandler:", err);
     }
