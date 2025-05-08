@@ -16,7 +16,7 @@ function MultiBotManager() {
     fetchBots();
 
     // Set up Socket.IO connection for real-time updates
-    socketRef.current = io('http://localhost:8080');
+    socketRef.current = io('https://gidibanks-ai-production.up.railway.app');
 
     socketRef.current.on('connect', () => {
       console.log('Connected to WebSocket server for bot updates');
