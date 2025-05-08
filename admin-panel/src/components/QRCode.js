@@ -103,7 +103,7 @@ function QRCode() {
   const fetchBotInstances = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/bots', {
+      const response = await axios.get('https://gidibanks-ai-production.up.railway.app/api/bots', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -127,7 +127,7 @@ function QRCode() {
       setMessage('');
 
       const token = localStorage.getItem('token');
-      const response = await axios.post(`/api/bots/${botId}/activate`, {}, {
+      const response = await axios.post(`https://gidibanks-ai-production.up.railway.app/api/bots/${botId}/activate`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -159,7 +159,7 @@ function QRCode() {
     setRefreshing(true);
     try {
       // First get the status to check if already connected
-      const statusResponse = await axios.get('/api/status');
+      const statusResponse = await axios.get('https://gidibanks-ai-production.up.railway.app/api/status');
       setStatus(statusResponse.data.state);
 
       if (statusResponse.data.phoneNumber) {
@@ -168,7 +168,7 @@ function QRCode() {
 
       // Only fetch QR code if not connected
       if (statusResponse.data.state !== 'open') {
-        const response = await axios.get('/api/qrcode');
+        const response = await axios.get('https://gidibanks-ai-production.up.railway.app/api/qrcode');
         console.log('QR code API response:', response.data);
 
         // Handle the QR code data
@@ -259,7 +259,7 @@ function QRCode() {
 
       // If connected, fetch status to get phone number
       if (data.status === 'open') {
-        axios.get('/api/status').then(response => {
+        axios.get('https://gidibanks-ai-production.up.railway.app/api/status').then(response => {
           if (response.data.phoneNumber) {
             setPhoneNumber(response.data.phoneNumber);
           }
@@ -391,7 +391,7 @@ function QRCode() {
 
   const confirmDisconnect = async () => {
     try {
-      await axios.post('/api/logout');
+      await axios.post('https://gidibanks-ai-production.up.railway.app/api/logout');
       setStatus('disconnected');
       setPhoneNumber(null);
       setQrCode('');
@@ -412,7 +412,7 @@ function QRCode() {
   const handleRestart = async () => {
     setRestarting(true);
     try {
-      await axios.post('/api/restart');
+      await axios.post('https://gidibanks-ai-production.up.railway.app/api/restart');
       setMessage('Bot restart initiated. Please wait for the QR code to appear.');
       setMessageType('info');
 
